@@ -112,84 +112,12 @@ typedef enum
  ****************************************************************************/
 PUBLIC void vJenie_CbConfigureNetwork(void)
 {
-		/*
-    uint8 u8Keys = 0;
-    volatile uint32 wait;
-	*/
-    /* Starting LCD and buttons here so channel can be set */
-	/*
-    vButtonInitFfd();
-    vLcdResetDefault();
-
-    sDemoData.sSystem.u8Channel = CHANNEL_MID;
-
-    vBuildSetChannelScreen();
-    */
-    /* Change to channel setting state */
-	/*
-    sDemoData.sSystem.eState = E_STATE_SET_CHANNEL;
-	*/
-    /* Loop while on set channel screen */
-	/*
-    while ((sDemoData.sSystem.eState == E_STATE_SET_CHANNEL))
-    {
-        (void)bProcessKeys(&u8Keys);
-        for (wait = 0; wait < 100000; wait++);
-        bKeyDebounce = FALSE;
-    }
-	*/
-    /* Set PAN_ID and other network stuff or defaults will be used */
-	/*
-    gJenie_Channel = sDemoData.sSystem.u8Channel;
-    gJenie_NetworkApplicationID=0xdeaddead;
-    gJenie_PanID   = DEMO_PAN_ID;
-	*/
-    /* Configure stack with routing table data */
-	/*
-    gJenie_RoutingEnabled    = TRUE;
-    gJenie_RoutingTableSize  = 100;
-    gJenie_RoutingTableSpace = (void *)asRoutingTable;
-    */
+	/* to be implemented */
 }
 
 PUBLIC void vJenie_CbInit(bool_t bWarmStart)
 {
-	/*
-    vUtils_Init();
-
-    vAHI_WakeTimerEnable(E_AHI_WAKE_TIMER_1, TRUE);
-
-    if (bWarmStart==FALSE)
-    {
-
-        sHomeData.bStackReady=FALSE;
-        sHomeData.eAppState = E_STATE_STARTUP;
-
-        vInitSystem();
-
-        vInitCoord();
-
-        vSetTimer();
-        switch (eJenie_Start(E_JENIE_COORDINATOR))        // Start network as coordinator
-        {
-        case E_JENIE_SUCCESS:
-            #ifdef HIGH_POWER
-                // Set high power mode
-                eJenie_RadioPower(18, TRUE);
-            #endif
-            break;
-
-        case E_JENIE_ERR_UNKNOWN:
-        case E_JENIE_ERR_INVLD_PARAM:
-        case E_JENIE_ERR_STACK_RSRC:
-        case E_JENIE_ERR_STACK_BUSY:
-
-        default:
-            // Do something on failure??
-            break;
-        }
-    }
-    */
+	/* to be implemented */
 }
 
 /****************************************************************************
@@ -209,18 +137,7 @@ PUBLIC void vJenie_CbInit(bool_t bWarmStart)
  ****************************************************************************/
 PUBLIC void vJenie_CbHwEvent(uint32 u32DeviceId,uint32 u32ItemBitmap)
 {
-	/*
-    if ((u32DeviceId == E_AHI_DEVICE_SYSCTRL)
-                && (u32ItemBitmap & (1 << E_AHI_SYSCTRL_WK0)))      // added for timer 0 interrupt
-    {
-        bTimer0Fired = TRUE;
-
-    } else if ((u32DeviceId == E_AHI_DEVICE_SYSCTRL)
-                && (u32ItemBitmap & E_AHI_SYSCTRL_WK1_MASK) )
-    {
-        bKeyDebounce = FALSE;
-    }
-    */
+	/* to be implemented */
 }
 
 /****************************************************************************
