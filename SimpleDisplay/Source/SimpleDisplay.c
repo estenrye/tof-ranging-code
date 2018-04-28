@@ -191,3 +191,35 @@ PUBLIC void vJenie_CbInit(bool_t bWarmStart)
     }
     */
 }
+
+/****************************************************************************
+ *
+ * NAME: vJenie_HwEvent
+ *
+ * DESCRIPTION:
+ * Adds events to the hardware event queue.
+ *
+ * PARAMETERS:      Name            RW  Usage
+ *                  u32Device       R   Peripheral responsible for interrupt e.g DIO
+ *                  u32ItemBitmap   R   Source of interrupt e.g. DIO bit map
+ *
+ * RETURNS:
+ * void
+ *
+ ****************************************************************************/
+PUBLIC void vJenie_CbHwEvent(uint32 u32DeviceId,uint32 u32ItemBitmap)
+{
+	/*
+    if ((u32DeviceId == E_AHI_DEVICE_SYSCTRL)
+                && (u32ItemBitmap & (1 << E_AHI_SYSCTRL_WK0)))      // added for timer 0 interrupt
+    {
+        bTimer0Fired = TRUE;
+
+    } else if ((u32DeviceId == E_AHI_DEVICE_SYSCTRL)
+                && (u32ItemBitmap & E_AHI_SYSCTRL_WK1_MASK) )
+    {
+        bKeyDebounce = FALSE;
+    }
+    */
+}
+
