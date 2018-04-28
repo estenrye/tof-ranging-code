@@ -112,7 +112,7 @@ typedef enum
  ****************************************************************************/
 PUBLIC void vJenie_CbConfigureNetwork(void)
 {
-	/*
+		/*
     uint8 u8Keys = 0;
     volatile uint32 wait;
 	*/
@@ -223,3 +223,57 @@ PUBLIC void vJenie_CbHwEvent(uint32 u32DeviceId,uint32 u32ItemBitmap)
     */
 }
 
+/****************************************************************************
+ *
+ * NAME: vJenie_Main
+ *
+ * DESCRIPTION:
+ * Main user routine. This is called by the Basic Operating System (BOS)
+ * at regular intervals.
+ *
+ * RETURNS:
+ * void
+ *
+ ****************************************************************************/
+PUBLIC void vJenie_CbMain(void)
+{
+	/* to be implemented */
+}
+
+/****************************************************************************
+ *
+ * NAME: vJenie_StackMgmtEvent
+ *
+ * DESCRIPTION:
+ * Used to receive stack management events
+ *
+ * PARAMETERS:      Name                    RW  Usage
+ *                  *psStackMgmtEvent       R   Pointer to event structure
+ *
+ * RETURNS:
+ * void
+ *
+ ****************************************************************************/
+PUBLIC void vJenie_CbStackMgmtEvent(teEventType eEventType, void *pvEventPrim)
+{
+	/* to be implemented */
+}
+
+/****************************************************************************
+ *
+ * NAME: vJenie_StackDataEvent
+ *
+ * DESCRIPTION:
+ * Used to receive stack data events
+ *
+ * PARAMETERS:      Name                    RW  Usage
+ *                  *psStackDataEvent       R   Pointer to data structure
+ *
+ * RETURNS:
+ * void
+ *
+ ****************************************************************************/
+PUBLIC void vJenie_CbStackDataEvent(teEventType eEventType, void *pvEventPrim)
+{
+	/* to be implemented */
+}
