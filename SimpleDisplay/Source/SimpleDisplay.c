@@ -8,8 +8,6 @@
 #include "LcdDriver.h"
 #include "AlsDriver.h"
 #include "HtsDriver.h"
-#include "HomeSensorConfig.h"
-#include "JennicLogo.h"
 #include "Button.h"
 #include "LedControl.h"
 #include "Jenie.h"
