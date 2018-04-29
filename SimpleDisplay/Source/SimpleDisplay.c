@@ -13,6 +13,20 @@
 #include "Jenie.h"
 #include "Utils.h"
 
+/****************************************************************************/
+/***        Method Declarations                                           ***/
+/****************************************************************************/
+// JenOS Required Functions:
+PUBLIC void vJenie_CbConfigureNetwork(void);
+PUBLIC void vJenie_CbInit(bool_t bWarmStart);
+PUBLIC void vJenie_CbMain(void);
+PUBLIC void vJenie_CbHwEvent(uint32 u32DeviceId,uint32 u32ItemBitmap);
+PUBLIC void vJenie_CbStackMgmtEvent(teEventType eEventType, void *pvEventPrim);
+PUBLIC void vJenie_CbStackDataEvent(teEventType eEventType, void *pvEventPrim);
+
+// Application Code Functions:
+PUBLIC void app_WriteHelloWorld(void);
+
 /****************************************************************************
  *
  * NAME: vJenie_ConfigureNetwork
@@ -26,7 +40,11 @@
  ****************************************************************************/
 PUBLIC void vJenie_CbConfigureNetwork(void)
 {
-	/* to be implemented */
+	/* Starting LCD and buttons here so channel can be set */
+	vButtonInitFfd();    // Docs: JN-RM-2003 Page 45
+	vLcdResetDefault();  // Docs: JN-RM-2003 Page 53
+
+	app_WriteHelloWorld();
 }
 
 PUBLIC void vJenie_CbInit(bool_t bWarmStart)
@@ -107,4 +125,22 @@ PUBLIC void vJenie_CbStackMgmtEvent(teEventType eEventType, void *pvEventPrim)
 PUBLIC void vJenie_CbStackDataEvent(teEventType eEventType, void *pvEventPrim)
 {
 	/* to be implemented */
+}
+
+
+PUBLIC void app_WriteHelloWorld(void)
+{
+	/* Docs: JN-RM-2003 
+	 * Page 56: void vLcdClear()
+	 * Page 57: void vLcdWriteText(char *pcString, uint8 u8Row, uint8 u8Column)
+	 * Page 58: void vLcdWriteTextRightJustified(char *pcString, uint8 u8Row, uint8 u8EndColumn)
+	 * Page 66: void vLcdRefreshAll(void)
+	 */
+    vLcdClear();  
+	vLcdWriteText("Esten Rye", 1, 0);
+	vLcdWriteTextRightJustified("SEIS 740", 1, 127);
+    vLcdWriteText("TOF Ranging Project", 2, 0);
+    vLcdWriteText("Hello World", 6, 0);
+	vLcdWriteText("I am here", 7, 0);
+    vLcdRefreshAll();
 }
