@@ -26,7 +26,7 @@ PUBLIC void vJenie_CbStackMgmtEvent(teEventType eEventType, void *pvEventPrim);
 PUBLIC void vJenie_CbStackDataEvent(teEventType eEventType, void *pvEventPrim);
 
 // Application Code Functions:
-PUBLIC void app_WriteHelloWorld(void);
+PUBLIC void lcd_WriteMainScreen(void);
 
 // Application Screens
 PUBLIC void lcd_BuildChannelSelectionScreen(void);
@@ -35,6 +35,9 @@ PUBLIC void lcd_UpdateChannelSelectionScreen(void);
 // Button Handlers
 PRIVATE bool_t button_ProcessKeys(uint8 *pu8Keys);
 PRIVATE void button_ProcessSetChannelKeyPressHandler(uint8 u8KeyMap);
+
+// System Initialization
+PRIVATE void init_System(void);
 
 /****************************************************************************/
 /***        Type Definitions                                              ***/
@@ -46,6 +49,13 @@ typedef enum
     E_STATE_SET_CHANNEL,
     E_STATE_SETUP_SCREEN
 } teState;
+
+typedef enum
+{
+    E_STATE_STARTUP,
+    E_STATE_RUNNING,
+    E_STATE_WAITING
+}teAppState;
 
 /* Button values */
 typedef enum
@@ -62,7 +72,19 @@ typedef struct {
     {
         teState eState;
         uint8   u8Channel;
+        // uint32  u32AppApiVersion;
+        // uint32  u32JenieVersion;
+        uint32  u32CalibratedTimeout;
     } sSystem;
+
+    struct
+    {
+        // uint64 u64DestAddr;
+        // uint64 u64ParentAddr;
+        bool_t bAppTimerStarted;
+        bool_t bStackReady;
+        uint8 eAppState;
+    } sHome;
 } tsApplicationState;
 
 /****************************************************************************/
@@ -70,12 +92,16 @@ typedef struct {
 /****************************************************************************/
 PRIVATE tsApplicationState sAppState;
 PRIVATE bool_t bKeyDebounce = FALSE;
+PRIVATE bool_t  bTimer0Fired;
 /* Routing table storage */
 PRIVATE tsJenieRoutingTable asRoutingTable[100];
 
 /****************************************************************************/
 /***        Macro Definitions                                             ***/
 /****************************************************************************/
+/* Block (time slice) values */
+#define BLOCK_TIME_IN_32K_PERIODS   1600
+
 #define ONE_MSEC_IN_32KHZ_CYCLES    32
 #define BUTTON_DEBOUNCE             (500 * ONE_MSEC_IN_32KHZ_CYCLES)
 /* PAN ID on which demo operates */
@@ -133,8 +159,18 @@ PUBLIC void vJenie_CbConfigureNetwork(void)
 
 PUBLIC void vJenie_CbInit(bool_t bWarmStart)
 {
+    vUtils_Init();
+    vAHI_WakeTimerEnable(E_AHI_WAKE_TIMER_1, TRUE);
+    if (bWarmStart==FALSE)
+    {
+        sAppState.sHome.bStackReady=FALSE;
+        sAppState.sHome.eAppState=E_STATE_STARTUP;
+    }
+
+    init_System();
+
 	/* to be implemented */
-	app_WriteHelloWorld();
+	lcd_WriteMainScreen();
 }
 
 /****************************************************************************
@@ -154,7 +190,16 @@ PUBLIC void vJenie_CbInit(bool_t bWarmStart)
  ****************************************************************************/
 PUBLIC void vJenie_CbHwEvent(uint32 u32DeviceId,uint32 u32ItemBitmap)
 {
-	/* to be implemented */
+	if ((u32DeviceId == E_AHI_DEVICE_SYSCTRL)
+                && (u32ItemBitmap & (1 << E_AHI_SYSCTRL_WK0)))      /* added for timer 0 interrupt */
+    {
+        bTimer0Fired = TRUE;
+
+    } else if ((u32DeviceId == E_AHI_DEVICE_SYSCTRL)
+                && (u32ItemBitmap & E_AHI_SYSCTRL_WK1_MASK) )
+    {
+        bKeyDebounce = FALSE;
+    }
 }
 
 /****************************************************************************
@@ -190,7 +235,39 @@ PUBLIC void vJenie_CbMain(void)
  ****************************************************************************/
 PUBLIC void vJenie_CbStackMgmtEvent(teEventType eEventType, void *pvEventPrim)
 {
-	/* to be implemented */
+	    switch (eEventType)
+    {
+    case E_JENIE_NETWORK_UP:
+        #ifdef DEBUG
+            vUtils_Debug("Network Up");
+        #endif
+        vLcdWriteText("Network Up Event", 3, 0);
+        vLcdRefreshAll();
+        sAppState.sHome.bStackReady=TRUE;
+        break;
+
+    case E_JENIE_REG_SVC_RSP:
+        break;
+
+    case E_JENIE_SVC_REQ_RSP:
+        break;
+
+    case E_JENIE_POLL_CMPLT:
+        break;
+
+    case E_JENIE_PACKET_SENT:
+        break;
+
+    case E_JENIE_PACKET_FAILED:
+        break;
+
+    case E_JENIE_CHILD_JOINED:
+        break;
+
+    default:
+        /* Unknown data event type */
+        break;
+    }
 }
 
 /****************************************************************************
@@ -210,10 +287,29 @@ PUBLIC void vJenie_CbStackMgmtEvent(teEventType eEventType, void *pvEventPrim)
 PUBLIC void vJenie_CbStackDataEvent(teEventType eEventType, void *pvEventPrim)
 {
 	/* to be implemented */
+    switch (eEventType)
+    {
+    case E_JENIE_DATA:
+        // vProcessIncomingData(((tsData*)pvEventPrim));
+        break;
+
+    case E_JENIE_DATA_TO_SERVICE:
+        break;
+
+    case E_JENIE_DATA_ACK:
+        break;
+
+    case E_JENIE_DATA_TO_SERVICE_ACK:
+        break;
+
+    default:
+        /*Unknown data event type*/
+        break;
+    }
 }
 
 
-PUBLIC void app_WriteHelloWorld(void)
+PUBLIC void lcd_WriteMainScreen(void)
 {
 	/* Docs: JN-RM-2003 
 	 * Page 56: void vLcdClear()
@@ -399,4 +495,37 @@ PRIVATE void button_ProcessSetChannelKeyPressHandler(uint8 u8KeyMap)
     default:
         break;
     }
+}
+
+/****************************************************************************
+ *
+ * NAME: init_System
+ *
+ * DESCRIPTION:
+ * Initialises stack and hardware. Also sets non-default values in the
+ * 802.15.4 PIB.
+ *
+ * RETURNS:
+ * void
+ *
+ ****************************************************************************/
+PRIVATE void init_System(void)
+{
+    /* Initialise stack and hardware interfaces, and register peripheral
+       interrupts with AppQueueApi handler. We aren't using callbacks
+       at all, just monitoring the upward queues in a loop */
+    /* Set up buttons and LEDs */
+    vLedControl(0, TRUE);
+    vLedControl(1, TRUE);
+    vLedControl(2, TRUE);
+    vLedControl(3, TRUE);
+    vLedInitFfd();
+
+    /* Set up hardware and splash screen */
+
+    /* Calibrate wake timer */
+    sAppState.sSystem.u32CalibratedTimeout = BLOCK_TIME_IN_32K_PERIODS * 10000 / u32AHI_WakeTimerCalibrate();
+
+    /* Enable timer to use for sequencing */
+    vAHI_WakeTimerEnable(E_AHI_WAKE_TIMER_0, TRUE);
 }
