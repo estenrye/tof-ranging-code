@@ -78,7 +78,7 @@
                 "_DEBUG",
                 "UNICODE",
                 "_UNICODE",
-				"JENNIC_CHIP_FAMILY JN514x"
+				"JENNIC_CHIP_FAMILY \"JN514x\""
             ],
             "intelliSenseMode": "msvc-x64",
             "browse": {
