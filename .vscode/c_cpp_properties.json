@@ -1,0 +1,101 @@
+{
+    "configurations": [
+        {
+            "name": "Mac",
+            "includePath": [
+                "/usr/include",
+                "/usr/local/include",
+                "${workspaceFolder}"
+            ],
+            "defines": [],
+            "intelliSenseMode": "clang-x64",
+            "browse": {
+                "path": [
+                    "/usr/include",
+                    "/usr/local/include",
+                    "${workspaceFolder}"
+                ],
+                "limitSymbolsToIncludedHeaders": true,
+                "databaseFilename": ""
+            },
+            "macFrameworkPath": [
+                "/System/Library/Frameworks",
+                "/Library/Frameworks"
+            ]
+        },
+        {
+            "name": "Linux",
+            "includePath": [
+                "/usr/include",
+                "/usr/local/include",
+                "${workspaceFolder}"
+            ],
+            "defines": [],
+            "intelliSenseMode": "clang-x64",
+            "browse": {
+                "path": [
+                    "/usr/include",
+                    "/usr/local/include",
+                    "${workspaceFolder}"
+                ],
+                "limitSymbolsToIncludedHeaders": true,
+                "databaseFilename": ""
+            }
+        },
+        {
+            "name": "Win32",
+            "includePath": [
+                "${workspaceFolder}",
+                "C:/Program Files (x86)/Microsoft Visual Studio/2017/Community/VC/Tools/MSVC/14.13.26128/include/*",
+                "C:/Program Files (x86)/Windows Kits/10/Include/10.0.16299.0/um",
+                "C:/Program Files (x86)/Windows Kits/10/Include/10.0.16299.0/ucrt",
+                "C:/Program Files (x86)/Windows Kits/10/Include/10.0.16299.0/shared",
+                "C:/Program Files (x86)/Windows Kits/10/Include/10.0.16299.0/winrt",
+				"C:/Jennic/Tools/ba-elf-ba2/ba-elf/include",
+				"C:/Jennic/Tools/ba-elf-ba2/gcc/ba-elf/4.1.2/include",
+				"C:/Jennic/Components/AES_SW/Include",
+				"C:/Jennic/Components/AppApi/Include",
+				"C:/Jennic/Components/AppQueueApi/Include",
+				"C:/Jennic/Components/Common/Include",
+				"C:/Jennic/Components/DBG/Include",
+				"C:/Jennic/Components/GDB/Include",
+				"C:/Jennic/Components/HardwareApi/Include",
+				"C:/Jennic/Components/Jennie/Include",
+				"C:/Jennic/Components/JennicLogo/Include",
+				"C:/Jennic/Components/Library/Include",
+				"C:/Jennic/Components/MAC/Include",
+				"C:/Jennic/Component/OAD/Include",
+				"C:/Jennic/Component/OS/Include",
+				"C:/Jennic/Components/PDM/Include",
+				"C:/Jennic/Components/PDUM/Include",
+				"C:/Jennic/Components/PWRM/Include",
+				"C:/Jennic/Components/Random/Include",
+				"C:/Jennic/Components/Timerserver/Include",
+				"C:/Jennic/Components/Utilities/Include",
+				"C:/Jennic/Platform/DK2/Include"
+            ],
+            "defines": [
+                "_DEBUG",
+                "UNICODE",
+                "_UNICODE",
+				"JENNIC_CHIP_FAMILY JN514x"
+            ],
+            "intelliSenseMode": "msvc-x64",
+            "browse": {
+                "path": [
+                    "${workspaceFolder}",
+                    "C:/Program Files (x86)/Microsoft Visual Studio/2017/Community/VC/Tools/MSVC/14.13.26128/include/*",
+                    "C:/Program Files (x86)/Windows Kits/10/Include/10.0.16299.0/um",
+                    "C:/Program Files (x86)/Windows Kits/10/Include/10.0.16299.0/ucrt",
+                    "C:/Program Files (x86)/Windows Kits/10/Include/10.0.16299.0/shared",
+                    "C:/Program Files (x86)/Windows Kits/10/Include/10.0.16299.0/winrt"
+                ],
+                "limitSymbolsToIncludedHeaders": true,
+                "databaseFilename": ""
+            },
+            "cStandard": "c11",
+            "cppStandard": "c++17"
+        }
+    ],
+    "version": 3
+}
