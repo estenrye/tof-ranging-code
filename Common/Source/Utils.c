@@ -332,6 +332,97 @@ uint8 chr;
     vAHI_UartWriteData(UART, '\n');
     while ((u8AHI_UartReadLineStatus(UART) & 0x20) == 0);
 }
+
+/****************************************************************************
+ *
+ * NAME: vStringCopy
+ *
+ * DESCRIPTION:
+ * Simple string copy as standard libraries not available.
+ *
+ * PARAMETERS:      Name    RW  Usage
+ *                  pcFrom  R   Pointer to string to copy
+ *                  pcTo    W   Pointer to store for new string
+ *
+ * RETURNS:
+ * void
+ *
+ ****************************************************************************/
+PUBLIC void vUtils_StringCopy(char *pcFrom, char *pcTo)
+{
+    while (*pcFrom != '\0')
+    {
+        *pcTo = *pcFrom;
+        pcTo++;
+        pcFrom++;
+    }
+    *pcTo = '\0';
+}
+
+/****************************************************************************
+ *
+ * NAME: vUtils_AdjustBoundedValue
+ *
+ * DESCRIPTION:
+ * Increment a variable: If the variable is the maximum in the normal range,
+ * sets it to a value that signifies 'off'. If the value is already 'off',
+ * sets it to 0 (assumed to be the minimum within the normal range). This
+ * function is used to set alarm levels.
+ *
+ * Decrement a variable: If the variable is 0 (assumed to be the minimum
+ * within the normal range), sets it to a value that signifies 'off'. If the
+ * value is already 'off', sets it to the maximum value in the normal range.
+ * This function is used to set alarm levels.
+ *
+ * PARAMETERS:      Name            RW  Usage
+ *                  pu8Value        R   Pointer to variable to adjust
+ *                  u8MaxValue      R   Maximum value in normal range
+ *                  u8OffValue      R   Value that signifies 'off'
+ *                  bUpNotDown      R   TRUE to increment, FALSE to decrement
+ *
+ * RETURNS:
+ * void
+ *
+ ****************************************************************************/
+PUBLIC void vUtils_AdjustBoundedValue(uint8 *pu8Value, uint8 u8MaxValue, uint8 u8OffValue, bool_t bUpNotDown)
+{
+    if (bUpNotDown)
+    {
+        if (*pu8Value == u8MaxValue)
+        {
+            *pu8Value = u8OffValue;
+        }
+        else
+        {
+            if ((*pu8Value == u8OffValue ) && (u8OffValue > u8MaxValue))
+            {
+                *pu8Value = 0;
+            }
+            else
+            {
+                *pu8Value = *pu8Value + 1;
+            }
+        }
+    }
+    else
+    {
+        if (*pu8Value == u8OffValue)
+        {
+            *pu8Value = u8MaxValue;
+        }
+        else
+        {
+            if (*pu8Value == 0)
+            {
+                *pu8Value = u8OffValue;
+            }
+            else
+            {
+                *pu8Value = *pu8Value - 1;
+            }
+        }
+    }
+}
 /****************************************************************************/
 /***        Local Functions                                               ***/
 /****************************************************************************/

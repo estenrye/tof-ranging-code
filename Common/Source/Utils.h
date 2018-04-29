@@ -81,7 +81,8 @@ PUBLIC void vUtils_ValToHex(char *pcOutString, uint32 u32Data, int iSize);
 PUBLIC void vUtils_ValToDec(char *pcOutString, uint8 u8Value);
 PUBLIC void vUtils_DisplayBytes(uint8 *pcOutString, uint8 u8Num);
 PUBLIC void vUtils_WriteChar(char u8chr);
-
+PUBLIC void vUtils_StringCopy(char *pcFrom, char *pcTo);
+PUBLIC void vUtils_AdjustBoundedValue(uint8 *pu8Value, uint8 u8MaxValue, uint8 u8OffValue, bool_t bUpNotDown);
 /****************************************************************************/
 /***        Exported Variables                                            ***/
 /****************************************************************************/
