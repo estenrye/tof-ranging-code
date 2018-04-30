@@ -1,4 +1,23 @@
 /****************************************************************************/
+/***        Macro Definitions                                             ***/
+/****************************************************************************/
+/* Block (time slice) values */
+#define BLOCK_TIME_IN_32K_PERIODS   1600
+#define MAX_BLOCKS                  20
+#define BLOCK_WRITE_MAIN_SCREEN     10
+#define ONE_MSEC_IN_32KHZ_CYCLES    32
+#define BUTTON_DEBOUNCE             (500 * ONE_MSEC_IN_32KHZ_CYCLES)
+/* PAN ID on which demo operates */
+#define DEMO_PAN_ID                       0x0e1c
+#define ENDPOINT_ADDR_BASE                0x0e01
+/* Channels available */
+#define CHANNEL_MIN                       11
+#define CHANNEL_MID                       18
+#define CHANNEL_MAX                       26
+
+#define NUMBER_OF_BEACONS 2
+
+/****************************************************************************/
 /***        Include files                                                 ***/
 /****************************************************************************/
 
@@ -26,6 +45,7 @@ PUBLIC void vJenie_CbStackDataEvent(teEventType eEventType, void *pvEventPrim);
 
 // Application Code Functions:
 PUBLIC void lcd_WriteMainScreen(void);
+PRIVATE void task_RegisterBeacon(uint64 u64SrcAddress);
 
 // Application Screens
 PUBLIC void lcd_BuildChannelSelectionScreen(void);
@@ -75,7 +95,20 @@ typedef enum
     E_KEYS_0_AND_3 = (BUTTON_0_MASK | BUTTON_3_MASK)
 } teKeyValues;
 
+/* Used to track an association between extended address and short address */
+typedef struct
+{
+    uint64 u64ExtAddr;
+    uint16 u16ShortAddr;
+} tsAssocNodes;
+
 typedef struct {
+    struct
+    {
+        tsAssocNodes asAssocNodes[NUMBER_OF_BEACONS];
+        uint8        u8AssociatedNodes;
+    } sNode;
+
 	struct
     {
         teState eState;
@@ -104,21 +137,6 @@ PRIVATE bool_t  bTimer0Fired;
 /* Routing table storage */
 PRIVATE tsJenieRoutingTable asRoutingTable[100];
 
-/****************************************************************************/
-/***        Macro Definitions                                             ***/
-/****************************************************************************/
-/* Block (time slice) values */
-#define BLOCK_TIME_IN_32K_PERIODS   1600
-#define MAX_BLOCKS                  20
-#define BLOCK_WRITE_MAIN_SCREEN     10
-#define ONE_MSEC_IN_32KHZ_CYCLES    32
-#define BUTTON_DEBOUNCE             (500 * ONE_MSEC_IN_32KHZ_CYCLES)
-/* PAN ID on which demo operates */
-#define DEMO_PAN_ID                       0x0e1c
-/* Channels available */
-#define CHANNEL_MIN                       11
-#define CHANNEL_MID                       18
-#define CHANNEL_MAX                       26
 
 /****************************************************************************
  *
@@ -276,20 +294,6 @@ PUBLIC void vJenie_CbMain(void)
                 eJenie_SetPermitJoin(TRUE);
             }
 
-            // if (sAppState.sSystem.eState == E_STATE_SETUP_SCREEN)
-            // {
-            //     vBuildSetupScreen();
-            // }
-            // else
-            // {
-            //     vBuildNetworkScreen(sDemoData.sGui.eCurrentSensor);
-            // }
-
-            // if (sDemoData.sNode.bLocalNode)
-            // {
-            //     vLedControl(0,FALSE);
-            // }
-
             sAppState.sHome.eAppState = E_STATE_RUNNING;
             break;
 
@@ -345,6 +349,7 @@ PUBLIC void vJenie_CbStackMgmtEvent(teEventType eEventType, void *pvEventPrim)
         case E_JENIE_NETWORK_UP:
             vUtils_Debug("E_JENIE_NETWORK_UP");
             sAppState.sHome.bStackReady=TRUE;
+            vLedControl(3, TRUE);
             break;
 
         case E_JENIE_REG_SVC_RSP:
@@ -369,8 +374,15 @@ PUBLIC void vJenie_CbStackMgmtEvent(teEventType eEventType, void *pvEventPrim)
 
         case E_JENIE_CHILD_JOINED:
             vUtils_Debug("E_JENIE_CHILD_JOINED");
+            tsChildJoined *joinEvent = ((tsChildJoined*) pvEventPrim);
+            task_RegisterBeacon(joinEvent->u64SrcAddress);
             break;
-
+        case E_JENIE_CHILD_LEAVE:
+            vUtils_Debug("E_JENIE_CHILD_LEAVE");
+            break;
+        case E_JENIE_CHILD_REJECTED:
+            vUtils_Debug("E_JENIE_CHILD_REJECTED");
+            break;
         default:
             vUtils_Debug("default");
             /* Unknown data event type */
@@ -395,8 +407,6 @@ PUBLIC void vJenie_CbStackMgmtEvent(teEventType eEventType, void *pvEventPrim)
  ****************************************************************************/
 PUBLIC void vJenie_CbStackDataEvent(teEventType eEventType, void *pvEventPrim)
 {
-	vUtils_Debug("vJenie_CbStackDataEvent");    
-	/* to be implemented */
     switch (eEventType)
     {
     case E_JENIE_DATA:
@@ -405,16 +415,19 @@ PUBLIC void vJenie_CbStackDataEvent(teEventType eEventType, void *pvEventPrim)
         break;
 
     case E_JENIE_DATA_TO_SERVICE:
+        vUtils_Debug("E_JENIE_DATA_TO_SERVICE");
         break;
 
     case E_JENIE_DATA_ACK:
+        vUtils_Debug("E_JENIE_DATA_ACK");
         break;
 
     case E_JENIE_DATA_TO_SERVICE_ACK:
+        vUtils_Debug("E_JENIE_DATA_TO_SERVICE_ACK");
         break;
 
     default:
-        /*Unknown data event type*/
+        vUtils_Debug("default");
         break;
     }
 }
@@ -435,6 +448,24 @@ PUBLIC void lcd_WriteMainScreen(void)
     {
         vLcdWriteText("Network Stack Ready: N", 3, 0);
     }
+    switch (sAppState.sNode.u8AssociatedNodes)
+    {
+        case 0:
+            vLcdWriteText("Beacon1: Unregistered" , 4, 0);
+            vLcdWriteText("Beacon2: Unregistered" , 5, 0);
+            break;
+        case 1:
+            vLcdWriteText("Beacon1: Registered" , 4, 0);
+            vLcdWriteText("Beacon2: Unregistered" , 5, 0);
+            break;
+        case 2:
+            vLcdWriteText("Beacon1: Registered" , 4, 0);
+            vLcdWriteText("Beacon2: Registered" , 5, 0);
+            break;
+        default:
+            break;
+    }
+    
     vLcdWriteText("Hello World", 6, 0);
 	vLcdWriteText("I am here", 7, 0);
     vLcdRefreshAll();
@@ -638,10 +669,10 @@ PRIVATE void init_System(void)
        interrupts with AppQueueApi handler. We aren't using callbacks
        at all, just monitoring the upward queues in a loop */
     /* Set up buttons and LEDs */
-    vLedControl(0, TRUE);
-    vLedControl(1, TRUE);
-    vLedControl(2, TRUE);
-    vLedControl(3, TRUE);
+    vLedControl(0, FALSE);
+    vLedControl(1, FALSE);
+    vLedControl(2, FALSE);
+    vLedControl(3, FALSE);
     vLedInitFfd();
 
     /* Set up hardware and splash screen */
@@ -743,4 +774,54 @@ PRIVATE void vProcessCurrentTimeBlock(uint8 u8TimeBlock)
              break;
 
     }
+}
+
+PRIVATE void task_RegisterBeacon(uint64 u64SrcAddress)
+{
+    uint8              u8Node;
+    uint8              u8AssocStatus;
+    uint16             u16ShortAddress;
+    /* Check if already associated (idiot proofing) */
+    u8Node = 0;
+    u16ShortAddress = 0xffff;
+
+    while (u8Node < sAppState.sNode.u8AssociatedNodes)
+    {
+        if (u64SrcAddress == sAppState.sNode.asAssocNodes[u8Node].u64ExtAddr)
+        {
+            /* Already in system: give it same short address */
+            u16ShortAddress = sAppState.sNode.asAssocNodes[u8Node].u16ShortAddr;
+        }
+        u8Node++;
+    }
+    /* Assume association succeeded */
+    u8AssocStatus = 0;
+    if (u16ShortAddress == 0xffff)
+    {
+        if (sAppState.sNode.u8AssociatedNodes < NUMBER_OF_BEACONS)
+        {
+            /* Allocate short address as next in list */
+            u16ShortAddress = ENDPOINT_ADDR_BASE + sAppState.sNode.u8AssociatedNodes;
+            /* Store details for future use */
+            sAppState.sNode.asAssocNodes[sAppState.sNode.u8AssociatedNodes].u64ExtAddr = u64SrcAddress;
+            sAppState.sNode.asAssocNodes[sAppState.sNode.u8AssociatedNodes].u16ShortAddr = u16ShortAddress;
+            sAppState.sNode.u8AssociatedNodes++;
+        }
+        else
+        {
+            /* PAN access denied */
+            u8AssocStatus = 2;
+        }
+    }
+
+    /* Update display if necessary */
+    if (sAppState.sSystem.eState == E_STATE_NETWORK)
+    {
+        lcd_WriteMainScreen();
+        vLedControl(sAppState.sNode.u8AssociatedNodes, TRUE);
+    }
+
+    vSetTimer1();
+    sAppState.sHome.eAppState = E_STATE_WAITING;
+
 }
