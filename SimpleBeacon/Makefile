@@ -2,7 +2,7 @@
 #
 # MODULE:   JN-AN-1065-JenNet-Home-Sensor-Demo
 #
-# DESCRIPTION: MakeFile
+# DESCRIPTION: AN1065_JN_HomeSensorCoord MakeFile
 #
 ############################################################################
 # 
@@ -32,7 +32,7 @@
 #
 #############################################################################
 
-DIRS	= AN1065_JN_HomeSensorRtr AN1065_JN_HomeSensorEndD AN1065_JN_HomeSensorCoord SimpleDisplay SimpleBeacon
+DIRS	= Build
 
 TARGETS: clean all
 
