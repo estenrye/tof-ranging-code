@@ -374,11 +374,13 @@ PUBLIC void vJenie_CbStackMgmtEvent(teEventType eEventType, void *pvEventPrim)
 
         case E_JENIE_CHILD_JOINED:
             vUtils_Debug("E_JENIE_CHILD_JOINED");
+            vUtils_DisplayMsg("Child Joined: ",(uint32)(((tsChildJoined*)pvEventPrim)->u64SrcAddress));
             tsChildJoined *joinEvent = ((tsChildJoined*) pvEventPrim);
             task_RegisterBeacon(joinEvent->u64SrcAddress);
             break;
         case E_JENIE_CHILD_LEAVE:
             vUtils_Debug("E_JENIE_CHILD_LEAVE");
+            vUtils_DisplayMsg("Child Left: ",(uint32)(((tsChildLeave*)pvEventPrim)->u64SrcAddress));
             break;
         case E_JENIE_CHILD_REJECTED:
             vUtils_Debug("E_JENIE_CHILD_REJECTED");
