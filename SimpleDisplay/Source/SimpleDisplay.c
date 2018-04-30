@@ -1,4 +1,3 @@
-
 /****************************************************************************/
 /***        Include files                                                 ***/
 /****************************************************************************/
@@ -39,6 +38,12 @@ PRIVATE void button_ProcessSetChannelKeyPressHandler(uint8 u8KeyMap);
 // System Initialization
 PRIVATE void init_System(void);
 
+// Task Management
+PRIVATE void vSetTimer(void);
+PRIVATE void vSetTimer1(void);
+PRIVATE uint8 u8UpdateTimeBlock(uint8 u8TimeBlock);
+PRIVATE void vProcessCurrentTimeBlock(uint8 u8TimeBlock);
+
 /****************************************************************************/
 /***        Type Definitions                                              ***/
 /****************************************************************************/
@@ -46,8 +51,11 @@ PRIVATE void init_System(void);
 typedef enum
 {
     E_STATE_NETWORK,
+    E_STATE_NODE,
+    E_STATE_NODE_CONTROL,
     E_STATE_SET_CHANNEL,
-    E_STATE_SETUP_SCREEN
+    E_STATE_SETUP_SCREEN,
+    E_STATE_SCANNING
 } teState;
 
 typedef enum
@@ -101,7 +109,8 @@ PRIVATE tsJenieRoutingTable asRoutingTable[100];
 /****************************************************************************/
 /* Block (time slice) values */
 #define BLOCK_TIME_IN_32K_PERIODS   1600
-
+#define MAX_BLOCKS                  20
+#define BLOCK_WRITE_MAIN_SCREEN     10
 #define ONE_MSEC_IN_32KHZ_CYCLES    32
 #define BUTTON_DEBOUNCE             (500 * ONE_MSEC_IN_32KHZ_CYCLES)
 /* PAN ID on which demo operates */
@@ -130,7 +139,8 @@ PUBLIC void vJenie_CbConfigureNetwork(void)
 	/* Starting LCD and buttons here so channel can be set */
 	vButtonInitFfd();    // Docs: JN-RM-2003 Page 45
 	vLcdResetDefault();  // Docs: JN-RM-2003 Page 53
-
+    vUtils_Init();
+    vUtils_Debug("vJenie_CbConfigureNetwork");
 	sAppState.sSystem.u8Channel = CHANNEL_MID;
 
 	lcd_BuildChannelSelectionScreen();
@@ -155,22 +165,50 @@ PUBLIC void vJenie_CbConfigureNetwork(void)
     gJenie_RoutingEnabled    = TRUE;
     gJenie_RoutingTableSize  = 100;
     gJenie_RoutingTableSpace = (void *)asRoutingTable;
+    vUtils_Debug("exiting vJenie_CbConfigureNetwork");
 }
 
 PUBLIC void vJenie_CbInit(bool_t bWarmStart)
 {
-    vUtils_Init();
+    vUtils_Debug("vJenie_CbInit");
     vAHI_WakeTimerEnable(E_AHI_WAKE_TIMER_1, TRUE);
     if (bWarmStart==FALSE)
     {
         sAppState.sHome.bStackReady=FALSE;
         sAppState.sHome.eAppState=E_STATE_STARTUP;
+        vUtils_Debug("E_STATE_STARTUP");
+        vSetTimer();
+        switch (eJenie_Start(E_JENIE_COORDINATOR))        /* Start network as coordinator */
+        {
+            case E_JENIE_SUCCESS:
+                vUtils_Debug("E_JENIE_SUCCESS");
+                #ifdef HIGH_POWER
+                    /* Set high power mode */
+                    eJenie_RadioPower(18, TRUE);
+                #endif
+                break;
+
+            case E_JENIE_ERR_UNKNOWN:
+                vUtils_Debug("E_JENIE_ERR_UNKNOWN");
+                break;
+            case E_JENIE_ERR_INVLD_PARAM:
+                vUtils_Debug("E_JENIE_ERR_INVLD_PARAM");
+                break;
+            case E_JENIE_ERR_STACK_RSRC:
+                vUtils_Debug("E_JENIE_ERR_STACK_RSRC");
+                break;
+            case E_JENIE_ERR_STACK_BUSY:
+                vUtils_Debug("E_JENIE_ERR_STACK_BUSY");
+                break;
+            default:
+                vUtils_Debug("default");
+                break;
+        }
     }
 
     init_System();
 
-	/* to be implemented */
-	lcd_WriteMainScreen();
+    vUtils_Debug("exiting vJenie_CbInit");
 }
 
 /****************************************************************************
@@ -190,6 +228,7 @@ PUBLIC void vJenie_CbInit(bool_t bWarmStart)
  ****************************************************************************/
 PUBLIC void vJenie_CbHwEvent(uint32 u32DeviceId,uint32 u32ItemBitmap)
 {
+    // vUtils_Debug("vJenie_CbHwEvent");
 	if ((u32DeviceId == E_AHI_DEVICE_SYSCTRL)
                 && (u32ItemBitmap & (1 << E_AHI_SYSCTRL_WK0)))      /* added for timer 0 interrupt */
     {
@@ -200,6 +239,7 @@ PUBLIC void vJenie_CbHwEvent(uint32 u32DeviceId,uint32 u32ItemBitmap)
     {
         bKeyDebounce = FALSE;
     }
+    // vUtils_Debug("exiting vJenie_CbHwEvent");
 }
 
 /****************************************************************************
@@ -216,7 +256,71 @@ PUBLIC void vJenie_CbHwEvent(uint32 u32DeviceId,uint32 u32ItemBitmap)
  ****************************************************************************/
 PUBLIC void vJenie_CbMain(void)
 {
-	/* to be implemented */
+    // vUtils_Debug("vJenie_CbMain");
+    static uint8 u8TimeBlock = MAX_BLOCKS;
+    uint8 u8Keys = 0;
+
+    /* regular watchdog reset */
+    #ifdef WATCHDOG_ENABLED
+       vAHI_WatchdogRestart();
+    #endif
+
+    if (sAppState.sHome.bStackReady)
+    {
+        switch (sAppState.sHome.eAppState)
+        {
+        case E_STATE_STARTUP:
+            vUtils_Debug("E_STATE_STARTUP");
+            if (!(bJenie_GetPermitJoin() ))
+            {
+                eJenie_SetPermitJoin(TRUE);
+            }
+
+            // if (sAppState.sSystem.eState == E_STATE_SETUP_SCREEN)
+            // {
+            //     vBuildSetupScreen();
+            // }
+            // else
+            // {
+            //     vBuildNetworkScreen(sDemoData.sGui.eCurrentSensor);
+            // }
+
+            // if (sDemoData.sNode.bLocalNode)
+            // {
+            //     vLedControl(0,FALSE);
+            // }
+
+            sAppState.sHome.eAppState = E_STATE_RUNNING;
+            break;
+
+        case E_STATE_RUNNING:
+            // vUtils_Debug("E_STATE_RUNNING");
+            vSetTimer();
+            /* Perform scheduler action */
+            vProcessCurrentTimeBlock(u8TimeBlock);
+            /* Check keys. Returns TRUE if 'reset' combination has been pressed */
+            (void)button_ProcessKeys(&u8Keys);
+            /* Increment scheduler time block for next time */
+            u8TimeBlock = u8UpdateTimeBlock(u8TimeBlock);
+
+            sAppState.sHome.eAppState = E_STATE_WAITING;
+            break;
+
+        case E_STATE_WAITING:
+            // vUtils_Debug("E_STATE_WAITING");
+            if (bTimer0Fired)
+            {
+                bTimer0Fired = FALSE;
+                sAppState.sHome.eAppState = E_STATE_RUNNING;
+            }
+            break;
+
+        default:
+            vUtils_Debug("default");
+            break;
+        }
+    }
+    // vUtils_Debug("exiting vJenie_CbMain");
 }
 
 /****************************************************************************
@@ -235,39 +339,44 @@ PUBLIC void vJenie_CbMain(void)
  ****************************************************************************/
 PUBLIC void vJenie_CbStackMgmtEvent(teEventType eEventType, void *pvEventPrim)
 {
-	    switch (eEventType)
+    vUtils_Debug("vJenie_CbStackMgmtEvent");
+    switch (eEventType)
     {
-    case E_JENIE_NETWORK_UP:
-        #ifdef DEBUG
-            vUtils_Debug("Network Up");
-        #endif
-        vLcdWriteText("Network Up Event", 3, 0);
-        vLcdRefreshAll();
-        sAppState.sHome.bStackReady=TRUE;
-        break;
+        case E_JENIE_NETWORK_UP:
+            vUtils_Debug("E_JENIE_NETWORK_UP");
+            sAppState.sHome.bStackReady=TRUE;
+            break;
 
-    case E_JENIE_REG_SVC_RSP:
-        break;
+        case E_JENIE_REG_SVC_RSP:
+            vUtils_Debug("E_JENIE_REG_SVC_RSP");
+            break;
 
-    case E_JENIE_SVC_REQ_RSP:
-        break;
+        case E_JENIE_SVC_REQ_RSP:
+            vUtils_Debug("E_JENIE_SVC_REQ_RSP");
+            break;
 
-    case E_JENIE_POLL_CMPLT:
-        break;
+        case E_JENIE_POLL_CMPLT:
+            vUtils_Debug("E_JENIE_POLL_CMPLT");
+            break;
 
-    case E_JENIE_PACKET_SENT:
-        break;
+        case E_JENIE_PACKET_SENT:
+            vUtils_Debug("E_JENIE_PACKET_SENT");
+            break;
 
-    case E_JENIE_PACKET_FAILED:
-        break;
+        case E_JENIE_PACKET_FAILED:
+            vUtils_Debug("E_JENIE_PACKET_FAILED");
+            break;
 
-    case E_JENIE_CHILD_JOINED:
-        break;
+        case E_JENIE_CHILD_JOINED:
+            vUtils_Debug("E_JENIE_CHILD_JOINED");
+            break;
 
-    default:
-        /* Unknown data event type */
-        break;
+        default:
+            vUtils_Debug("default");
+            /* Unknown data event type */
+            break;
     }
+    vUtils_Debug("exiting vJenie_CbStackMgmtEvent");
 }
 
 /****************************************************************************
@@ -286,10 +395,12 @@ PUBLIC void vJenie_CbStackMgmtEvent(teEventType eEventType, void *pvEventPrim)
  ****************************************************************************/
 PUBLIC void vJenie_CbStackDataEvent(teEventType eEventType, void *pvEventPrim)
 {
+	vUtils_Debug("vJenie_CbStackDataEvent");    
 	/* to be implemented */
     switch (eEventType)
     {
     case E_JENIE_DATA:
+    	vUtils_Debug("E_JENIE_DATA");    
         // vProcessIncomingData(((tsData*)pvEventPrim));
         break;
 
@@ -311,19 +422,23 @@ PUBLIC void vJenie_CbStackDataEvent(teEventType eEventType, void *pvEventPrim)
 
 PUBLIC void lcd_WriteMainScreen(void)
 {
-	/* Docs: JN-RM-2003 
-	 * Page 56: void vLcdClear()
-	 * Page 57: void vLcdWriteText(char *pcString, uint8 u8Row, uint8 u8Column)
-	 * Page 58: void vLcdWriteTextRightJustified(char *pcString, uint8 u8Row, uint8 u8EndColumn)
-	 * Page 66: void vLcdRefreshAll(void)
-	 */
+	vUtils_Debug("lcd_WriteMainScreen");
     vLcdClear();  
 	vLcdWriteText("Esten Rye", 1, 0);
 	vLcdWriteTextRightJustified("SEIS 740", 1, 127);
     vLcdWriteText("TOF Ranging Project", 2, 0);
+    if (sAppState.sHome.bStackReady)
+    {
+        vLcdWriteText("Network Stack Ready: Y", 3, 0);
+    }
+    else
+    {
+        vLcdWriteText("Network Stack Ready: N", 3, 0);
+    }
     vLcdWriteText("Hello World", 6, 0);
 	vLcdWriteText("I am here", 7, 0);
     vLcdRefreshAll();
+	vUtils_Debug("exiting lcd_WriteMainScreen");    
 }
 
 /****************************************************************************
@@ -380,10 +495,14 @@ PUBLIC void lcd_BuildChannelSelectionScreen(void)
  ****************************************************************************/
 PUBLIC void lcd_UpdateChannelSelectionScreen(void)
 {
+    vUtils_Debug("lcd_UpdateChannelSelectionScreen");
 	char displayOutput[5];
 	vUtils_ValToDec(displayOutput, sAppState.sSystem.u8Channel);
 	vLcdWriteText(displayOutput, 7, 16);
+    vUtils_Debug("Channel Selected");
+    vUtils_Debug(displayOutput);
     vLcdRefreshAll();
+    vUtils_Debug("exiting lcd_UpdateChannelSelectionScreen");    
 }
 
 /****************************************************************************
@@ -407,6 +526,7 @@ PUBLIC void lcd_UpdateChannelSelectionScreen(void)
  ****************************************************************************/
 PRIVATE bool_t button_ProcessKeys(uint8 *pu8Keys)
 {
+    //vUtils_Debug("button_ProcessKeys");
     uint8 u8KeysDown;
     uint8 u8NewKeysDown;
 
@@ -444,7 +564,7 @@ PRIVATE bool_t button_ProcessKeys(uint8 *pu8Keys)
 
     /* Store value for use next time */
     *pu8Keys = u8KeysDown;
-
+    //vUtils_Debug("exiting button_ProcessKeys");
     return (u8KeysDown == E_KEYS_0_AND_3);
 }
 
@@ -466,6 +586,7 @@ PRIVATE bool_t button_ProcessKeys(uint8 *pu8Keys)
  ****************************************************************************/
 PRIVATE void button_ProcessSetChannelKeyPressHandler(uint8 u8KeyMap)
 {
+    vUtils_Debug("button_ProcessSetChannelKeyPressHandler");
     switch (u8KeyMap)
     {
     case E_KEY_0:
@@ -488,13 +609,14 @@ PRIVATE void button_ProcessSetChannelKeyPressHandler(uint8 u8KeyMap)
         /* Done button: start beaconing and go to network screen */
         // vStartBeacon();
         sAppState.sSystem.eState = E_STATE_NETWORK;
-        vLcdWriteTextToClearLine("Initialising",7,0);
+        vLcdWriteTextToClearLine("Initializing",7,0);
         vLcdRefreshArea(0,7,128,1);
         break;
 
     default:
         break;
     }
+    vUtils_Debug("exiting button_ProcessSetChannelKeyPressHandler");
 }
 
 /****************************************************************************
@@ -511,6 +633,7 @@ PRIVATE void button_ProcessSetChannelKeyPressHandler(uint8 u8KeyMap)
  ****************************************************************************/
 PRIVATE void init_System(void)
 {
+    vUtils_Debug("init_System");
     /* Initialise stack and hardware interfaces, and register peripheral
        interrupts with AppQueueApi handler. We aren't using callbacks
        at all, just monitoring the upward queues in a loop */
@@ -528,4 +651,96 @@ PRIVATE void init_System(void)
 
     /* Enable timer to use for sequencing */
     vAHI_WakeTimerEnable(E_AHI_WAKE_TIMER_0, TRUE);
+    vUtils_Debug("exiting init_System");
+}
+
+/****************************************************************************
+ *
+ * NAME: vSetTimer
+ *
+ * DESCRIPTION:
+ * Sets wake-up timer 0 for a 50ms time-out. Assumes that timer was
+ * previously enabled.
+ *
+ * RETURNS:
+ * void
+ *
+ ****************************************************************************/
+PRIVATE void vSetTimer(void)
+{
+    /* Set timer for next block */
+    vAHI_WakeTimerStart(E_AHI_WAKE_TIMER_0, sAppState.sSystem.u32CalibratedTimeout);
+}
+
+
+PRIVATE void vSetTimer1(void)
+{
+    /* Set timer for next block */
+    vAHI_WakeTimerStart(E_AHI_WAKE_TIMER_0, sAppState.sSystem.u32CalibratedTimeout*3);
+}
+
+/****************************************************************************
+ *
+ * NAME: u8UpdateTimeBlock
+ *
+ * DESCRIPTION:
+ * Moves the state machine time block on by one time period.
+ *
+ * PARAMETERS:      Name            RW  Usage
+ *                  u8TimeBlock     R   Previous time block
+ *
+ * RETURNS:
+ * uint8 Next time block
+ *
+ ****************************************************************************/
+PRIVATE uint8 u8UpdateTimeBlock(uint8 u8TimeBlock)
+{
+    /* Update block state for next time, if in a state where regular
+       updates should be performed */
+    if ((sAppState.sSystem.eState != E_STATE_SET_CHANNEL)
+            // && (sAppState.sSystem.eState != E_STATE_SETUP_SCREEN)
+            && (sAppState.sSystem.eState != E_STATE_SCANNING))
+    {
+        u8TimeBlock++;
+        if (u8TimeBlock >= MAX_BLOCKS)
+        {
+            u8TimeBlock = 0;
+        }
+    }
+
+    return u8TimeBlock;
+}
+
+/****************************************************************************
+ *
+ * NAME: vProcessCurrentTimeBlock
+ *
+ * DESCRIPTION:
+ * Operates a simple state machine. Called 20 times per second, this performs
+ * several tasks over u8LocalSensora 1 second period, with the time split into 50ms blocks.
+ * In one block it updates the display, in another it starts a reading from
+ * the temperature, in another it reads the temperature, etc.
+ *
+ * PARAMETERS:      Name            RW  Usage
+ *                  u8TimeBlock     R   Current time block, 0-19
+ *u8LocalSensor
+ * RETURNS:
+ * void
+ *
+ * NOTES:
+ * A value greater than 19 may be used for u8TimeBlock, to ensure that the
+ * simple state machine remains idle.
+ *
+ ****************************************************************************/
+PRIVATE void vProcessCurrentTimeBlock(uint8 u8TimeBlock)
+{
+    /* Process current block scheduled activity */
+    switch (u8TimeBlock)
+    {
+        case BLOCK_WRITE_MAIN_SCREEN:
+             /* Time to update the display */
+             lcd_WriteMainScreen();
+             break;
+
+    }
 }
