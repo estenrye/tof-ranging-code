@@ -198,30 +198,7 @@ PUBLIC void vJenie_CbInit(bool_t bWarmStart)
         vLedInitRfd();
         vButtonInitRfd();
 
-        #ifdef NO_SLEEP
-            vAHI_WakeTimerEnable(E_AHI_WAKE_TIMER_1, TRUE);
-        #endif
-
-        /* Set SW1(dio9) to input */
-        vAHI_DioSetDirection(E_AHI_DIO9_INT, 0);
-        /* set interrupt for DIO9 to occur on button release - rising edge */
-        vAHI_DioInterruptEdge(E_AHI_DIO9_INT, 0);
-        /* enable interrupt for DIO9 */
-        vAHI_DioInterruptEnable(E_AHI_DIO9_INT, 0);
-
-        /* Set SW2(dio10) to input */
-        vAHI_DioSetDirection(E_AHI_DIO10_INT, 0);
-        /* set interrupt for DIO9 to occur on button release - rising edge */
-        vAHI_DioInterruptEdge(E_AHI_DIO10_INT, 0);
-        /* enable interrupt for DIO9 */
-        vAHI_DioInterruptEnable(E_AHI_DIO10_INT, 0);
-
-        /* Set up peripheral hardware */
-        vALSreset();
-        vHTSreset();
-
-        /* Start ALS now: it automatically keeps re-sampling after this */
-        vALSstartReadChannel(0);
+        vAHI_WakeTimerEnable(E_AHI_WAKE_TIMER_1, TRUE);
 
         sHomeData.eAppState = E_STATE_REGISTER;
         switch(eJenie_Start(E_JENIE_END_DEVICE))        /* Start network as end device */
@@ -253,13 +230,6 @@ PUBLIC void vJenie_CbInit(bool_t bWarmStart)
 			break;
         }
     }else{
-
-        /* Set up peripheral hardware */
-        vALSreset();
-        vHTSreset();
-
-        /* Start ALS now: it automatically keeps re-sampling after this */
-        vALSstartReadChannel(0);
 
         switch(eJenie_Start(E_JENIE_END_DEVICE))        /* Start network as end device */
         {
@@ -357,13 +327,8 @@ PUBLIC void vJenie_CbMain(void)
         }
         loop_count--;
 
-        #ifdef NO_SLEEP
-            vAHI_WakeTimerStart(E_AHI_WAKE_TIMER_1, DELAY_PERIOD);
-            bTimeOut = FALSE;
-        #else
-            eJenie_SetSleepPeriod(SLEEP_PERIOD * 10);
-            eJenie_Sleep(E_JENIE_SLEEP_OSCON_RAMON);
-        #endif
+        vAHI_WakeTimerStart(E_AHI_WAKE_TIMER_1, DELAY_PERIOD);
+        bTimeOut = FALSE;
     }
 
 
@@ -388,6 +353,7 @@ PUBLIC void vJenie_CbStackMgmtEvent(teEventType eEventType, void *pvEventPrim)
     switch(eEventType)
     {
     case E_JENIE_NETWORK_UP:
+		vUtils_Debug("E_JENIE_NETWORK_UP");
         sHomeData.u64ParentAddr = ((tsNwkStartUp*)pvEventPrim)->u64ParentAddress;
 		vUtils_DisplayMsg("New parent:",(uint32)sHomeData.u64ParentAddr);
 		vUtils_Debug("Network Up");
@@ -396,24 +362,31 @@ PUBLIC void vJenie_CbStackMgmtEvent(teEventType eEventType, void *pvEventPrim)
         break;
 
     case E_JENIE_REG_SVC_RSP:
+		vUtils_Debug("E_JENIE_REG_SVC_RSP");
         break;
 
     case E_JENIE_SVC_REQ_RSP:
+		vUtils_Debug("E_JENIE_SVC_REQ_RSP");
         break;
 
     case E_JENIE_POLL_CMPLT:
+		vUtils_Debug("E_JENIE_POLL_CMPLT");
         break;
 
     case E_JENIE_PACKET_SENT:
+		vUtils_Debug("E_JENIE_PACKET_SENT");
         break;
 
     case E_JENIE_PACKET_FAILED:
+		vUtils_Debug("E_JENIE_PACKET_FAILED");
         break;
 
     case E_JENIE_CHILD_JOINED:
+		vUtils_Debug("E_JENIE_CHILD_JOINED");
         break;
 
     case E_JENIE_STACK_RESET:
+		vUtils_Debug("E_JENIE_STACK_RESET");
 		vUtils_Debug("Stack Reset");
         sHomeData.bStackReady = FALSE;
         sHomeData.eAppState = E_STATE_REGISTER;
@@ -449,12 +422,15 @@ PUBLIC void vJenie_CbStackDataEvent(teEventType eEventType, void *pvEventPrim)
     switch(eEventType)
     {
     case E_JENIE_DATA:
+		vUtils_Debug("E_JENIE_DATA");
         break;
 
     case E_JENIE_DATA_TO_SERVICE:
+		vUtils_Debug("E_JENIE_DATA_TO_SERVICE");
         break;
 
     case E_JENIE_DATA_ACK:
+		vUtils_Debug("E_JENIE_DATA_ACK");
         /* Update current state on success*/
         if (sHomeData.eAppState == E_STATE_REGISTER)
         {
@@ -464,6 +440,7 @@ PUBLIC void vJenie_CbStackDataEvent(teEventType eEventType, void *pvEventPrim)
     break;
 
     case E_JENIE_DATA_TO_SERVICE_ACK:
+		vUtils_Debug("E_JENIE_DATA_TO_SERVICE_ACK");
         break;
 
     default:
@@ -489,17 +466,7 @@ PUBLIC void vJenie_CbStackDataEvent(teEventType eEventType, void *pvEventPrim)
  ****************************************************************************/
 PRIVATE void vProcessTxData(void)
 {
-    uint8 au8Payload[8];
-    au8Payload[0] = DEMO_ENDPOINT_MESSAGE_ID;
-    au8Payload[1] = sDemoData.sTransceiver.u8PrevRxBsn;
-    au8Payload[2] = sDemoData.sControls.u8Switch;
-    au8Payload[3] = sDemoData.sSensors.u8TempResult;
-    au8Payload[4] = sDemoData.sSensors.u8HtsResult;
-    au8Payload[5] = sDemoData.sSensors.u8AlsResult;
-    au8Payload[6] = 0;
-    au8Payload[7] = 0;
-    eJenie_SendData(0ULL,au8Payload,8,0);
-
+    vUtils_Debug("vProcessTxData");
 }
 
 /****************************************************************************
@@ -517,6 +484,7 @@ PRIVATE void vProcessTxData(void)
  ****************************************************************************/
 PRIVATE void vTxRegister(void)
 {
+    vUtils_Debug("vTxRegister");
     uint8 au8Payload[1];
     au8Payload[0] = DEMO_ENDPOINT_JOIN_ID;
     eJenie_SendData(0ULL,au8Payload,1,TXOPTION_ACKREQ);
@@ -539,20 +507,10 @@ PRIVATE void vTxRegister(void)
  ****************************************************************************/
 PUBLIC void vJenie_CbHwEvent(uint32 u32DeviceId,uint32 u32ItemBitmap)
 {
-    /* Not used in this application */
-    if ((u32DeviceId == E_AHI_DEVICE_SYSCTRL)
-                && (u32ItemBitmap & E_AHI_DIO9_INT))
-    {
-        sDemoData.sControls.u8Switch = 0;
-    }
-    else if((u32DeviceId == E_AHI_DEVICE_SYSCTRL)
-                && (u32ItemBitmap & E_AHI_DIO10_INT))
-    {
-        sDemoData.sControls.u8Switch = 1;
-    }
-    else if ( (u32DeviceId == E_AHI_DEVICE_SYSCTRL)
+    if ( (u32DeviceId == E_AHI_DEVICE_SYSCTRL)
                 && (u32ItemBitmap & E_AHI_SYSCTRL_WK1_MASK) )
     {
+        vUtils_Debug("vJenie_CbHwEvent");        
         bTimeOut = TRUE;
     }
 }
@@ -572,20 +530,10 @@ PUBLIC void vJenie_CbHwEvent(uint32 u32DeviceId,uint32 u32ItemBitmap)
  ****************************************************************************/
 PRIVATE void vInitEndpoint(void)
 {
-    /* Set defaults for software */
-    sDemoData.sControls.u8Switch = 0;
-    sDemoData.sControls.u8LightAlarmLevel = 0;
-    sDemoData.sSensors.u8TempResult = 0;
-    sDemoData.sSensors.u8HtsResult = 0;
-    sDemoData.sSensors.u8AlsResult = 0;
+    vUtils_Debug("vInitEndpoint");
     sDemoData.sSystem.eState = E_STATE_OFF;
     sDemoData.sSystem.u16ShortAddr = 0xffff;
     sDemoData.sSystem.u8ThisNode = 0;
-
-    /* Set light sensor values to 'wrong' ends of range, so the first time
-       a value is read they will get updated */
-    sDemoData.sLightSensor.u16Hi = 0;
-    sDemoData.sLightSensor.u16Lo = 65535;
 }
 
 /****************************************************************************
@@ -608,80 +556,5 @@ PRIVATE void vInitEndpoint(void)
  ****************************************************************************/
 PRIVATE void vProcessRead(void)
 {
-    uint16 u16LightSensor;
-    uint16 u16Diff;
-
-
-    /* Read light level, adjust to range 0-6. This sensor automatically starts
-       a new conversion afterwards so there is no need for a 'start read' */
-    u16LightSensor = u16ALSreadChannelResult();
-    /* Adjust the high and low values if necessary, and obtain the
-       difference between them */
-
-    if (sDemoData.sLightSensor.u16Hi < u16LightSensor)
-    {
-        sDemoData.sLightSensor.u16Hi = u16LightSensor;
-    }
-
-    if (sDemoData.sLightSensor.u16Lo > u16LightSensor)
-    {
-        sDemoData.sLightSensor.u16Lo = u16LightSensor;
-    }
-
-    u16Diff = sDemoData.sLightSensor.u16Hi - sDemoData.sLightSensor.u16Lo;
-
-    /* Work out the current value as a value between 0 and 6 within the
-       range of values that have been seen previously */
-    if (u16Diff)
-    {
-        sDemoData.sSensors.u8AlsResult = (uint8)(((uint32)(u16LightSensor - sDemoData.sLightSensor.u16Lo) * 6) / (uint32)u16Diff);
-    }
-    else
-    {
-        sDemoData.sSensors.u8AlsResult = 3;
-    }
-
-    /* Set LED 1 based on light level */
-    if ((sDemoData.sSensors.u8AlsResult <= sDemoData.sControls.u8LightAlarmLevel)
-        && (sDemoData.sControls.u8LightAlarmLevel < 7))
-    {
-        vLedControl(LED2, TRUE);
-    }
-    else
-    {
-        vLedControl(LED2, FALSE);
-    }
-
-    /* Read temperature, 0-52 are acceptable. Polls until result received */
-    vHTSstartReadTemp();
-    sDemoData.sSensors.u8TempResult = u8FindMin((uint8)u16HTSreadTempResult(), 52);
-
-
-    /* Read humidity, 0-104 are acceptable. Polls until result received */
-    vHTSstartReadHumidity();
-    sDemoData.sSensors.u8HtsResult = u8FindMin((uint8)u16HTSreadHumidityResult(), 104);
-}
-
-/****************************************************************************
- *
- * NAME: u8FindMin
- *
- * DESCRIPTION:
- * Returns the smallest of two values.
- *
- * PARAMETERS:      Name    RW  Usage
- *                  u8Val1  R   First value to compare
- *                  u8Val2  R   Second value to compare
- *
- * RETURNS:
- * uint8, lowest of two input values
- *
- ****************************************************************************/
-PRIVATE uint8 u8FindMin(uint8 u8Val1, uint8 u8Val2)
-{
-    if (u8Val1 < u8Val2)
-    {
-        return u8Val1;
-    }
-    return u8Val2;
+    vUtils_Debug("vProcessRead");
 }
