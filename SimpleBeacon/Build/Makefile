@@ -2,7 +2,7 @@
 #
 # MODULE:   JN-AN-1065-JenNet-Home-Sensor-Demo 
 #
-# DESCRIPTION: AN1065_JN_HomeSensorCoord MakeFile
+# DESCRIPTION: AN1065_JN_HomeSensorEndD MakeFile
 #
 ############################################################################
 # 
@@ -60,7 +60,8 @@ JENNIC_PCB ?= DEVKIT2
 
 JENNIC_STACK ?= JenNet
 # Specify device type (e.g. CR (Coordinator/router), ED (End Device))
-DEVICE_TYPE ?= CR
+DEVICE_TYPE ?= ED
+
 ##############################################################################
 # Debug options define DEBUG for HW debug
 #DEBUG ?=HW
@@ -117,7 +118,6 @@ INCFLAGS += -I$(COMPONENTS_BASE_DIR)/Utilities/Include
 INCFLAGS += -I$(COMPONENTS_BASE_DIR)/AppQueueApi/Include 
 INCFLAGS += -I$(COMPONENTS_BASE_DIR)/JenNet/Include 
 INCFLAGS += -I$(COMPONENTS_BASE_DIR)/Jenie/Include 
-
 ##############################################################################
 # Application libraries
 # Specify additional Component libraries
@@ -179,6 +179,7 @@ all: $(TARGET)_$(JENNIC_CHIP)$(BIN_SUFFIX).bin
 $(TARGET)_$(JENNIC_CHIP)$(BIN_SUFFIX).elf: $(APPOBJS) $(addsuffix _$(JENNIC_CHIP_FAMILY).a,$(addprefix $(COMPONENTS_BASE_DIR)/Library/lib,$(APPLIBS))) 
 	$(info Linking $@ ...)
 	$(CC) -Wl,--gc-sections -Wl,-u_AppColdStart -Wl,-u_AppWarmStart $(LDFLAGS) -T$(LINKCMD) -o $@ $(APPOBJS) -Wl,--start-group  $(addprefix -l,$(LDLIBS)) -Wl,--end-group -Wl,-Map,$(TARGET)_$(JENNIC_CHIP)$(BIN_SUFFIX).map 
+
 
 $(TARGET)_$(JENNIC_CHIP)$(BIN_SUFFIX).bin: $(TARGET)_$(JENNIC_CHIP)$(BIN_SUFFIX).elf 
 	${SIZE} $<

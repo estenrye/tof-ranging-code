@@ -2,7 +2,7 @@
 #
 # MODULE:   JN-AN-1065-JenNet-Home-Sensor-Demo
 #
-# DESCRIPTION: AN1065_JN_HomeSensorCoord MakeFile
+# DESCRIPTION: AN1065_JN_HomeSensorEndD MakeFile
 #
 ############################################################################
 # 
@@ -34,7 +34,7 @@
 
 # Application target name
 
-TARGET = AN1065_JN_HomeSensorCoord
+TARGET = AN1065_JN_HomeSensorEndD
 
 #  Note: Target name must be the same as the subfolder name
 ##############################################################################
@@ -65,8 +65,8 @@ endif
 JENNIC_STACK ?= JN
 # For compatibility with V1 makefile
 JENIE_IMPL    ?= JN
-# Specify device type (e.g. CR (Coordinator/router), ED (End Device))
-DEVICE_TYPE ?= CR
+# Sepcify device type (e.g. CR (Coordinator/router), ED (End Device))
+DEVICE_TYPE ?= ED
 
 ##############################################################################
 # Debug options - define DEBUG for debug type
@@ -102,7 +102,6 @@ APP_COMMON_SRC_DIR = $(APP_BASE)/Common/Source
 # Application Source files
 
 # Note: Path to source file is found using vpath below, so only .c filename is required
-
 APPSRC += Utils.c
 APPSRC += $(TARGET).c
 
@@ -115,9 +114,11 @@ ADDITIONAL_SRC_DIR += $(SDK_BASE_DIR)/Common/Source
 
 ##############################################################################
 # Standard Application header search paths
-# JenieAppConfig must go before other INCFLAG definitions on JN5139 
+# JenieAppConfig must go before other INCFLAG definitions on JN5139
 BASE_DIR ?= $(SDK_BASE_DIR)
+
 include $(SDK_BASE_DIR)/Jenie/Library/JenieAppConfig.mk
+
 
 INCFLAGS += -I$(APP_SRC_DIR)
 INCFLAGS += -I$(APP_SRC_DIR)/..
@@ -134,13 +135,14 @@ else
 endif
 INCFLAGS += -I$(SDK_BASE_DIR)/Platform/Common/Include
 
-#INCFLAGS += -I$(COMPONENTS_BASE_DIR)/AppQueueApi/Include 
+INCFLAGS += -I$(COMPONENTS_BASE_DIR)/AppQueueApi/Include 
 
 INCFLAGS += -I$(SDK_BASE_DIR)/Jenie/Include 
 
 ##############################################################################
 # Application libraries
 # Specify additional Component libraries
+
 
 ##############################################################################
 
