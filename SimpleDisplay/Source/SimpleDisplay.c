@@ -384,6 +384,7 @@ PUBLIC void vJenie_CbStackMgmtEvent(teEventType eEventType, void *pvEventPrim)
             break;
         case E_JENIE_CHILD_REJECTED:
             vUtils_Debug("E_JENIE_CHILD_REJECTED");
+            vUtils_DisplayMsg("Child Left: ",(uint32)(((tsChildRejected*)pvEventPrim)->u64SrcAddress));            
             break;
         default:
             vUtils_Debug("default");

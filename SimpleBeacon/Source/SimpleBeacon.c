@@ -86,6 +86,7 @@ typedef struct
 {
     uint64 u64DestAddr;
     uint64 u64ParentAddr;
+    uint64 u64LocalAddr;
     bool_t bAppTimerStarted;
     bool_t bStackReady;
     uint8 eAppState;
@@ -355,7 +356,9 @@ PUBLIC void vJenie_CbStackMgmtEvent(teEventType eEventType, void *pvEventPrim)
     case E_JENIE_NETWORK_UP:
 		vUtils_Debug("E_JENIE_NETWORK_UP");
         sHomeData.u64ParentAddr = ((tsNwkStartUp*)pvEventPrim)->u64ParentAddress;
+        sHomeData.u64LocalAddr = ((tsNwkStartUp*)pvEventPrim)->u64LocalAddress;
 		vUtils_DisplayMsg("New parent:",(uint32)sHomeData.u64ParentAddr);
+        vUtils_DisplayMsg("Local Addr:" (uint32)sHomeData.u64LocalAddr);
 		vUtils_Debug("Network Up");
         sHomeData.bStackReady=TRUE;
         bTimeOut=TRUE;
@@ -382,7 +385,20 @@ PUBLIC void vJenie_CbStackMgmtEvent(teEventType eEventType, void *pvEventPrim)
         break;
 
     case E_JENIE_CHILD_JOINED:
-		vUtils_Debug("E_JENIE_CHILD_JOINED");
+        vUtils_Debug("E_JENIE_CHILD_JOINED");
+        vUtils_DisplayMsg("Child Joined: ",(uint32)(((tsChildJoined*)pvEventPrim)->u64SrcAddress));
+        tsChildJoined *joinEvent = ((tsChildJoined*) pvEventPrim);
+        task_RegisterBeacon(joinEvent->u64SrcAddress);
+        break;
+
+    case E_JENIE_CHILD_LEAVE:
+        vUtils_Debug("E_JENIE_CHILD_LEAVE");
+        vUtils_DisplayMsg("Child Left: ",(uint32)(((tsChildLeave*)pvEventPrim)->u64SrcAddress));
+        break;
+
+    case E_JENIE_CHILD_REJECTED:
+        vUtils_Debug("E_JENIE_CHILD_REJECTED");
+        vUtils_DisplayMsg("Child Left: ",(uint32)(((tsChildRejected*)pvEventPrim)->u64SrcAddress));            
         break;
 
     case E_JENIE_STACK_RESET:
