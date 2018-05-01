@@ -438,7 +438,7 @@ PUBLIC void vJenie_CbStackDataEvent(teEventType eEventType, void *pvEventPrim)
 
 PUBLIC void lcd_WriteMainScreen(void)
 {
-	vUtils_Debug("lcd_WriteMainScreen");
+	// vUtils_Debug("lcd_WriteMainScreen");
     vLcdClear();  
 	vLcdWriteText("Esten Rye", 1, 0);
 	vLcdWriteTextRightJustified("SEIS 740", 1, 127);
@@ -472,7 +472,7 @@ PUBLIC void lcd_WriteMainScreen(void)
     vLcdWriteText("Hello World", 6, 0);
 	vLcdWriteText("I am here", 7, 0);
     vLcdRefreshAll();
-	vUtils_Debug("exiting lcd_WriteMainScreen");    
+	// vUtils_Debug("exiting lcd_WriteMainScreen");    
 }
 
 /****************************************************************************
