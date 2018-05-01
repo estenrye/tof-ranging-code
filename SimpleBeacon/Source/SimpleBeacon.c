@@ -13,6 +13,18 @@
 #include "Jenie.h"
 #include "Utils.h"
 
+/****************************************************************************/
+/***        Method Declarations                                           ***/
+/****************************************************************************/
+// JenOS Required Functions:
+PUBLIC void vJenie_CbConfigureNetwork(void);
+PUBLIC void vJenie_CbInit(bool_t bWarmStart);
+PUBLIC void vJenie_CbMain(void);
+PUBLIC void vJenie_CbHwEvent(uint32 u32DeviceId,uint32 u32ItemBitmap);
+PUBLIC void vJenie_CbStackMgmtEvent(teEventType eEventType, void *pvEventPrim);
+PUBLIC void vJenie_CbStackDataEvent(teEventType eEventType, void *pvEventPrim);
+
+
 /****************************************************************************
  *
  * NAME: vJenie_ConfigureNetwork
