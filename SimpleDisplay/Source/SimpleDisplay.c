@@ -411,26 +411,26 @@ PUBLIC void vJenie_CbStackDataEvent(teEventType eEventType, void *pvEventPrim)
 {
     switch (eEventType)
     {
-    case E_JENIE_DATA:
-    	vUtils_Debug("E_JENIE_DATA");    
-        // vProcessIncomingData(((tsData*)pvEventPrim));
-        break;
+        case E_JENIE_DATA:
+            vUtils_Debug("E_JENIE_DATA");    
+            // vProcessIncomingData(((tsData*)pvEventPrim));
+            break;
 
-    case E_JENIE_DATA_TO_SERVICE:
-        vUtils_Debug("E_JENIE_DATA_TO_SERVICE");
-        break;
+        case E_JENIE_DATA_TO_SERVICE:
+            vUtils_Debug("E_JENIE_DATA_TO_SERVICE");
+            break;
 
-    case E_JENIE_DATA_ACK:
-        vUtils_Debug("E_JENIE_DATA_ACK");
-        break;
+        case E_JENIE_DATA_ACK:
+            vUtils_Debug("E_JENIE_DATA_ACK");
+            break;
 
-    case E_JENIE_DATA_TO_SERVICE_ACK:
-        vUtils_Debug("E_JENIE_DATA_TO_SERVICE_ACK");
-        break;
+        case E_JENIE_DATA_TO_SERVICE_ACK:
+            vUtils_Debug("E_JENIE_DATA_TO_SERVICE_ACK");
+            break;
 
-    default:
-        vUtils_Debug("default");
-        break;
+        default:
+            vUtils_Debug("default");
+            break;
     }
 }
 
