@@ -14,6 +14,48 @@
 #include "Utils.h"
 
 /****************************************************************************/
+/***        Macro Definitions                                             ***/
+/****************************************************************************/
+#define DEMO_PAN_ID                       0x0e1c
+
+/****************************************************************************/
+/***        Type Definitions                                              ***/
+/****************************************************************************/
+typedef enum
+{
+    E_STATE_OFF,
+    E_STATE_REGISTER,
+    E_STATE_RUNNING
+}teAppState;
+
+/* All application data with scope within the entire file is kept here, */
+typedef struct
+{
+    struct
+	{
+		uint64 u64DestAddr;
+		uint64 u64ParentAddr;
+		bool_t bAppTimerStarted;
+		bool_t bStackReady;
+		uint8 eAppState;
+	} sHome;
+
+    /* System (state, assigned address, channel) */
+    struct
+    {
+        teAppState eState;
+        uint16  u16ShortAddr;
+        uint8   u8ThisNode;
+        uint8   u8Channel;
+    } sSystem;
+} tsApplicationState;
+
+/****************************************************************************/
+/***        Local Variables                                               ***/
+/****************************************************************************/
+PRIVATE tsApplicationState sAppState;
+
+/****************************************************************************/
 /***        Method Declarations                                           ***/
 /****************************************************************************/
 // JenOS Required Functions:
@@ -38,7 +80,16 @@ PUBLIC void vJenie_CbStackDataEvent(teEventType eEventType, void *pvEventPrim);
  ****************************************************************************/
 PUBLIC void vJenie_CbConfigureNetwork(void)
 {
-	/* to be implemented */
+	vUtils_Init();
+	vUtils_Debug("vJenie_CbConfigureNetwork");
+    /* Set PAN_ID and other network stuff or defaults will be used */
+    gJenie_NetworkApplicationID =   0xdeaddead;
+    gJenie_PanID                =   DEMO_PAN_ID;
+    gJenie_EndDevicePollPeriod  =   10;
+    gJenie_EndDeviceScanSleep   =   100;
+
+    gJenie_RoutingEnabled       = FALSE;
+	vUtils_Debug("exiting vJenie_CbConfigureNetwork");
 }
 
 PUBLIC void vJenie_CbInit(bool_t bWarmStart)
