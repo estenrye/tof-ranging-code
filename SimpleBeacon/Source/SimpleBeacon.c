@@ -358,7 +358,7 @@ PUBLIC void vJenie_CbStackMgmtEvent(teEventType eEventType, void *pvEventPrim)
         sHomeData.u64ParentAddr = ((tsNwkStartUp*)pvEventPrim)->u64ParentAddress;
         sHomeData.u64LocalAddr = ((tsNwkStartUp*)pvEventPrim)->u64LocalAddress;
 		vUtils_DisplayMsg("New parent:",(uint32)sHomeData.u64ParentAddr);
-        vUtils_DisplayMsg("Local Addr:" (uint32)sHomeData.u64LocalAddr);
+        vUtils_DisplayMsg("Local Addr:", (uint32)sHomeData.u64LocalAddr);
 		vUtils_Debug("Network Up");
         sHomeData.bStackReady=TRUE;
         bTimeOut=TRUE;
