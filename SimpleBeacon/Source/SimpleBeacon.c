@@ -1,4 +1,3 @@
-#define DEBUG TRUE
 /****************************************************************************
  *
  * MODULE:             JenNet Home Sensor Demo
@@ -172,9 +171,9 @@ PRIVATE uint8 u8FindMin(uint8 u8Val1, uint8 u8Val2);
  ****************************************************************************/
 PUBLIC void vJenie_CbConfigureNetwork(void)
 {
-    vUtils_Init();
+	vUtils_Init();
 	vUtils_Debug("vJenie_CbConfigureNetwork");
-    /* Set PAN_ID and other network stuff or defaults will be used */
+/* Set PAN_ID and other network stuff or defaults will be used */
     gJenie_NetworkApplicationID =   0xdeaddead;
     gJenie_PanID                =   DEMO_PAN_ID;
     gJenie_EndDevicePollPeriod  =   10;
@@ -199,7 +198,30 @@ PUBLIC void vJenie_CbInit(bool_t bWarmStart)
         vLedInitRfd();
         vButtonInitRfd();
 
-        vAHI_WakeTimerEnable(E_AHI_WAKE_TIMER_1, TRUE);
+        #ifdef NO_SLEEP
+            vAHI_WakeTimerEnable(E_AHI_WAKE_TIMER_1, TRUE);
+        #endif
+
+        /* Set SW1(dio9) to input */
+        vAHI_DioSetDirection(E_AHI_DIO9_INT, 0);
+        /* set interrupt for DIO9 to occur on button release - rising edge */
+        vAHI_DioInterruptEdge(E_AHI_DIO9_INT, 0);
+        /* enable interrupt for DIO9 */
+        vAHI_DioInterruptEnable(E_AHI_DIO9_INT, 0);
+
+        /* Set SW2(dio10) to input */
+        vAHI_DioSetDirection(E_AHI_DIO10_INT, 0);
+        /* set interrupt for DIO9 to occur on button release - rising edge */
+        vAHI_DioInterruptEdge(E_AHI_DIO10_INT, 0);
+        /* enable interrupt for DIO9 */
+        vAHI_DioInterruptEnable(E_AHI_DIO10_INT, 0);
+
+        /* Set up peripheral hardware */
+        vALSreset();
+        vHTSreset();
+
+        /* Start ALS now: it automatically keeps re-sampling after this */
+        vALSstartReadChannel(0);
 
         sHomeData.eAppState = E_STATE_REGISTER;
         switch(eJenie_Start(E_JENIE_END_DEVICE))        /* Start network as end device */
@@ -231,6 +253,13 @@ PUBLIC void vJenie_CbInit(bool_t bWarmStart)
 			break;
         }
     }else{
+
+        /* Set up peripheral hardware */
+        vALSreset();
+        vHTSreset();
+
+        /* Start ALS now: it automatically keeps re-sampling after this */
+        vALSstartReadChannel(0);
 
         switch(eJenie_Start(E_JENIE_END_DEVICE))        /* Start network as end device */
         {
@@ -323,13 +352,18 @@ PUBLIC void vJenie_CbMain(void)
             break;
 
         default:
-            vUtils_Debug("Unknown State");
+			vUtils_Debug("Unknown State");
             break;
         }
         loop_count--;
 
-        vAHI_WakeTimerStart(E_AHI_WAKE_TIMER_1, DELAY_PERIOD);
-        bTimeOut = FALSE;
+        #ifdef NO_SLEEP
+            vAHI_WakeTimerStart(E_AHI_WAKE_TIMER_1, DELAY_PERIOD);
+            bTimeOut = FALSE;
+        #else
+            eJenie_SetSleepPeriod(SLEEP_PERIOD * 10);
+            eJenie_Sleep(E_JENIE_SLEEP_OSCON_RAMON);
+        #endif
     }
 
 
@@ -482,6 +516,17 @@ PUBLIC void vJenie_CbStackDataEvent(teEventType eEventType, void *pvEventPrim)
 PRIVATE void vProcessTxData(void)
 {
     vUtils_Debug("vProcessTxData");
+    uint8 au8Payload[8];
+    au8Payload[0] = DEMO_ENDPOINT_MESSAGE_ID;
+    au8Payload[1] = sDemoData.sTransceiver.u8PrevRxBsn;
+    au8Payload[2] = sDemoData.sControls.u8Switch;
+    au8Payload[3] = sDemoData.sSensors.u8TempResult;
+    au8Payload[4] = sDemoData.sSensors.u8HtsResult;
+    au8Payload[5] = sDemoData.sSensors.u8AlsResult;
+    au8Payload[6] = 0;
+    au8Payload[7] = 0;
+    eJenie_SendData(0ULL,au8Payload,8,0);
+
 }
 
 /****************************************************************************
@@ -522,7 +567,18 @@ PRIVATE void vTxRegister(void)
  ****************************************************************************/
 PUBLIC void vJenie_CbHwEvent(uint32 u32DeviceId,uint32 u32ItemBitmap)
 {
-    if ( (u32DeviceId == E_AHI_DEVICE_SYSCTRL)
+    /* Not used in this application */
+    if ((u32DeviceId == E_AHI_DEVICE_SYSCTRL)
+                && (u32ItemBitmap & E_AHI_DIO9_INT))
+    {
+        sDemoData.sControls.u8Switch = 0;
+    }
+    else if((u32DeviceId == E_AHI_DEVICE_SYSCTRL)
+                && (u32ItemBitmap & E_AHI_DIO10_INT))
+    {
+        sDemoData.sControls.u8Switch = 1;
+    }
+    else if ( (u32DeviceId == E_AHI_DEVICE_SYSCTRL)
                 && (u32ItemBitmap & E_AHI_SYSCTRL_WK1_MASK) )
     {
         vUtils_Debug("vJenie_CbHwEvent");        
@@ -546,9 +602,20 @@ PUBLIC void vJenie_CbHwEvent(uint32 u32DeviceId,uint32 u32ItemBitmap)
 PRIVATE void vInitEndpoint(void)
 {
     vUtils_Debug("vInitEndpoint");
+    /* Set defaults for software */
+    sDemoData.sControls.u8Switch = 0;
+    sDemoData.sControls.u8LightAlarmLevel = 0;
+    sDemoData.sSensors.u8TempResult = 0;
+    sDemoData.sSensors.u8HtsResult = 0;
+    sDemoData.sSensors.u8AlsResult = 0;
     sDemoData.sSystem.eState = E_STATE_OFF;
     sDemoData.sSystem.u16ShortAddr = 0xffff;
     sDemoData.sSystem.u8ThisNode = 0;
+
+    /* Set light sensor values to 'wrong' ends of range, so the first time
+       a value is read they will get updated */
+    sDemoData.sLightSensor.u16Hi = 0;
+    sDemoData.sLightSensor.u16Lo = 65535;
 }
 
 /****************************************************************************
@@ -572,4 +639,80 @@ PRIVATE void vInitEndpoint(void)
 PRIVATE void vProcessRead(void)
 {
     vUtils_Debug("vProcessRead");
+    uint16 u16LightSensor;
+    uint16 u16Diff;
+
+
+    /* Read light level, adjust to range 0-6. This sensor automatically starts
+       a new conversion afterwards so there is no need for a 'start read' */
+    u16LightSensor = u16ALSreadChannelResult();
+    /* Adjust the high and low values if necessary, and obtain the
+       difference between them */
+
+    if (sDemoData.sLightSensor.u16Hi < u16LightSensor)
+    {
+        sDemoData.sLightSensor.u16Hi = u16LightSensor;
+    }
+
+    if (sDemoData.sLightSensor.u16Lo > u16LightSensor)
+    {
+        sDemoData.sLightSensor.u16Lo = u16LightSensor;
+    }
+
+    u16Diff = sDemoData.sLightSensor.u16Hi - sDemoData.sLightSensor.u16Lo;
+
+    /* Work out the current value as a value between 0 and 6 within the
+       range of values that have been seen previously */
+    if (u16Diff)
+    {
+        sDemoData.sSensors.u8AlsResult = (uint8)(((uint32)(u16LightSensor - sDemoData.sLightSensor.u16Lo) * 6) / (uint32)u16Diff);
+    }
+    else
+    {
+        sDemoData.sSensors.u8AlsResult = 3;
+    }
+
+    /* Set LED 1 based on light level */
+    if ((sDemoData.sSensors.u8AlsResult <= sDemoData.sControls.u8LightAlarmLevel)
+        && (sDemoData.sControls.u8LightAlarmLevel < 7))
+    {
+        vLedControl(LED2, TRUE);
+    }
+    else
+    {
+        vLedControl(LED2, FALSE);
+    }
+
+    /* Read temperature, 0-52 are acceptable. Polls until result received */
+    vHTSstartReadTemp();
+    sDemoData.sSensors.u8TempResult = u8FindMin((uint8)u16HTSreadTempResult(), 52);
+
+
+    /* Read humidity, 0-104 are acceptable. Polls until result received */
+    vHTSstartReadHumidity();
+    sDemoData.sSensors.u8HtsResult = u8FindMin((uint8)u16HTSreadHumidityResult(), 104);
+}
+
+/****************************************************************************
+ *
+ * NAME: u8FindMin
+ *
+ * DESCRIPTION:
+ * Returns the smallest of two values.
+ *
+ * PARAMETERS:      Name    RW  Usage
+ *                  u8Val1  R   First value to compare
+ *                  u8Val2  R   Second value to compare
+ *
+ * RETURNS:
+ * uint8, lowest of two input values
+ *
+ ****************************************************************************/
+PRIVATE uint8 u8FindMin(uint8 u8Val1, uint8 u8Val2)
+{
+    if (u8Val1 < u8Val2)
+    {
+        return u8Val1;
+    }
+    return u8Val2;
 }
