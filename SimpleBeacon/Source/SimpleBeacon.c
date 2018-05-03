@@ -70,10 +70,19 @@
 
 /* networking values */
 #define DEMO_PAN_ID                       0x0e1c
+#define COORDINATOR_ADDR				  0ULL
 
+/* message types */
+#define BEACON_ASSIGNMENT                 0xb0
 /****************************************************************************/
 /***        Type Definitions                                              ***/
 /****************************************************************************/
+typedef enum
+{
+	E_BEACON_0,
+	E_BEACON_1
+} teBeaconAssignment;
+
 /* Button values */
 typedef enum
 {
@@ -81,34 +90,24 @@ typedef enum
     E_KEY_1 = BUTTON_1_MASK
 } teKeyValues;
 
-/* All application data with scope within the entire file is kept here, */
-typedef struct
-{
-    uint64 u64DestAddr;
-    uint64 u64ParentAddr;
-    bool_t bAppTimerStarted;
-    bool_t bStackReady;
-    uint8 eAppState;
-} tsHomeData;
-
 typedef enum
 {
     E_STATE_OFF,
     E_STATE_REGISTER,
     E_STATE_RUNNING
 }teAppState;
+
 /* All variables with scope throughout module are in one structure */
 typedef struct
 {
-    /* Transceiver (basically anything TX/RX not covered elsewhere) */
-    struct
-    {
-        uint8   u8CurrentTxHandle;
-        uint8   u8PrevRxBsn;
-    } sTransceiver;
-
-
-
+	struct
+	{
+		uint64 u64DestAddr;
+		uint64 u64ParentAddr;
+		bool_t bAppTimerStarted;
+		bool_t bStackReady;
+		uint8 eAppState;
+	} sState;
 
     /* System (state, assigned address, channel) */
     struct
@@ -124,7 +123,6 @@ typedef struct
 /***        Local Variables                                               ***/
 /****************************************************************************/
 /* File scope data */
-PRIVATE tsHomeData sHomeData;
 PRIVATE tsDemoData sDemoData;
 
 PRIVATE bool_t bTimeOut;
@@ -164,7 +162,7 @@ PUBLIC void vJenie_CbInit(bool_t bWarmStart)
     if(bWarmStart==FALSE)
     {
         (void)u32AHI_Init();
-        sHomeData.bStackReady=FALSE;
+        sDemoData.sState.bStackReady=FALSE;
         /* Initialise buttons, LEDs and program variables */
         /* Set DIO for buttons and LEDs */
         vLedControl(LED1, FALSE);
@@ -177,7 +175,7 @@ PUBLIC void vJenie_CbInit(bool_t bWarmStart)
         #endif
 
 
-        sHomeData.eAppState = E_STATE_REGISTER;
+        sDemoData.sState.eAppState = E_STATE_REGISTER;
         switch(eJenie_Start(E_JENIE_END_DEVICE))        /* Start network as end device */
         {
         case E_JENIE_SUCCESS:
@@ -267,9 +265,9 @@ PUBLIC void vJenie_CbMain(void)
        vAHI_WatchdogRestart();
     #endif
 
-    if(sHomeData.bStackReady && bTimeOut)       // Stack up and running and waiting for us to do something
+    if(sDemoData.sState.bStackReady && bTimeOut)       // Stack up and running and waiting for us to do something
     {
-        switch(sHomeData.eAppState)
+        switch(sDemoData.sState.eAppState)
         {
         case E_STATE_REGISTER:
 			vUtils_Debug("E_STATE_REGISTER");
@@ -334,10 +332,10 @@ PUBLIC void vJenie_CbStackMgmtEvent(teEventType eEventType, void *pvEventPrim)
     {
     case E_JENIE_NETWORK_UP:
 		vUtils_Debug("E_JENIE_NETWORK_UP");
-        sHomeData.u64ParentAddr = ((tsNwkStartUp*)pvEventPrim)->u64ParentAddress;
-		vUtils_DisplayMsg("New parent:",(uint32)sHomeData.u64ParentAddr);
+        sDemoData.sState.u64ParentAddr = ((tsNwkStartUp*)pvEventPrim)->u64ParentAddress;
+		vUtils_DisplayMsg("New parent:",(uint32)sDemoData.sState.u64ParentAddr);
 		vUtils_Debug("Network Up");
-        sHomeData.bStackReady=TRUE;
+        sDemoData.sState.bStackReady=TRUE;
         bTimeOut=TRUE;
         break;
 
@@ -380,8 +378,8 @@ PUBLIC void vJenie_CbStackMgmtEvent(teEventType eEventType, void *pvEventPrim)
     case E_JENIE_STACK_RESET:
 		vUtils_Debug("E_JENIE_STACK_RESET");
 		vUtils_Debug("Stack Reset");
-        sHomeData.bStackReady = FALSE;
-        sHomeData.eAppState = E_STATE_REGISTER;
+        sDemoData.sState.bStackReady = FALSE;
+        sDemoData.sState.eAppState = E_STATE_REGISTER;
         break;
 
     default:
@@ -424,10 +422,10 @@ PUBLIC void vJenie_CbStackDataEvent(teEventType eEventType, void *pvEventPrim)
     case E_JENIE_DATA_ACK:
 		vUtils_Debug("E_JENIE_DATA_ACK");
         /* Update current state on success*/
-        if (sHomeData.eAppState == E_STATE_REGISTER)
+        if (sDemoData.sState.eAppState == E_STATE_REGISTER)
         {
 			vUtils_Debug("Registered");
-            sHomeData.eAppState = E_STATE_RUNNING;
+            sDemoData.sState.eAppState = E_STATE_RUNNING;
         }
     break;
 
@@ -469,3 +467,7 @@ PUBLIC void vJenie_CbHwEvent(uint32 u32DeviceId,uint32 u32ItemBitmap)
     }
 }
 
+PRIVATE void interrupt_ProcessRxData(tsData *sData)
+{
+
+}
