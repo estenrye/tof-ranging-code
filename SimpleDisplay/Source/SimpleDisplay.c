@@ -262,7 +262,6 @@ PRIVATE void vSetTimer(void);
 PRIVATE void vSetTimer1(void);
 
 PRIVATE void vProcessRegisterChildNode(uint64 u64SrcAddress);
-PRIVATE void vProcessIncomingData(tsData *sData);
 
 PUBLIC void vUTIL_NumToString(uint32 u32Data, char *pcString);
 
@@ -577,7 +576,6 @@ PUBLIC void vJenie_CbStackDataEvent(teEventType eEventType, void *pvEventPrim)
     {
     case E_JENIE_DATA:
         vUtils_Debug("E_JENIE_DATA");    
-        vProcessIncomingData(((tsData*)pvEventPrim));
         break;
 
         case E_JENIE_DATA_TO_SERVICE:
@@ -2280,94 +2278,3 @@ PRIVATE void vSetTimer1(void)
     vAHI_WakeTimerStart(E_AHI_WAKE_TIMER_0, sDemoData.sSystem.u32CalibratedTimeout*3);
 }
 
-/****************************************************************************
- *
- * NAME: vProcessIncomingData
- *
- * DESCRIPTION:
- * Deals with any incoming MCPS data events. If the event is an indication
- * from a device with a short address matching a demo endpoint, the data in
- * the payload is stored for display the next time that the LCD is updated.
- *
- * PARAMETERS: Name        RW  Usage
- *             psMcpsInd   R   Pointer to structure containing MCPS event
- *
- * RETURNS:
- * void
- *
- ****************************************************************************/
-PRIVATE void vProcessIncomingData(tsData *sData)
-{
-    tsNodeData *psNodeData;
-    uint16 u16ShortAddress;
-    uint16 u16NodeAddr;
-    uint8 u8Node=0;
-    uint8 u8Count;
-
-    /* Check that MCPS frame is a valid sensor one */
-
-    if (sData->u16Length > 0)
-    {
-        switch (sData->pau8Data[0])
-        {
-        case DEMO_ENDPOINT_MESSAGE_ID:
-            vUtils_Debug("DEMO_ENDPOINT_MESSAGE_ID");
-            if (sData->u16Length == 8)
-            {
-                /* Use address to determine node */
-                u16ShortAddress = 0xffff;
-                while (u8Node < sDemoData.sNode.u8AssociatedNodes)
-                {
-                    if ((sData->u64SrcAddress == sDemoData.sNode.asAssocNodes[u8Node].u64ExtAddr) &&
-                            (sData->u64SrcAddress == sDemoData.sNode.asAssocNodes[u8Node].u64ExtAddr))
-                    {
-                        /* Found in system: Use it's same short address */
-                        u16ShortAddress = sDemoData.sNode.asAssocNodes[u8Node].u16ShortAddr;
-                    }
-                    u8Node++;
-                }
-
-                if (u16ShortAddress==0xffff)
-                {
-                    /* could not find the required device in the network */
-                    return;
-                }
-
-                u16NodeAddr = u16ShortAddress;
-                if ((u16NodeAddr < DEMO_ENDPOINT_ADDR_BASE)
-                        || (u16NodeAddr >= (DEMO_ENDPOINT_ADDR_BASE + DEMO_ENDPOINTS)))
-                {
-                    return;
-                }
-
-                /* Store data for node */
-                u8Node = (uint8)(u16NodeAddr - DEMO_ENDPOINT_ADDR_BASE);
-                psNodeData = &sDemoData.sNode.asNodeData[u8Node];
-
-                psNodeData->u8FramesMissed = 0;
-                psNodeData->u8SwitchOn = sData->pau8Data[2];
-
-                vLedControl(u8Node, psNodeData->u8SwitchOn);
-
-                for (u8Count = 0; u8Count < DEMO_SENSOR_LIST_LEN; u8Count++)
-                {
-                    psNodeData->asNodeElementData[u8Count].u8NowValue = sData->pau8Data[u8Count + 3];
-                }
-
-                psNodeData->u8Rssi = 0;
-            }
-            break;
-
-        case DEMO_ENDPOINT_JOIN_ID:
-            vUtils_Debug("DEMO_ENDPOINT_JOIN_ID");
-            vProcessRegisterChildNode(sData->u64SrcAddress);
-            break;
-
-        default:
-            break;
-        }
-    }
-}
-/****************************************************************************/
-/***        END OF FILE                                                   ***/
-/****************************************************************************/
