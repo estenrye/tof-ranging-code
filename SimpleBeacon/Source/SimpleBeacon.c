@@ -513,16 +513,6 @@ PUBLIC void vJenie_CbStackDataEvent(teEventType eEventType, void *pvEventPrim)
  ****************************************************************************/
 PRIVATE void vProcessTxData(void)
 {
-    uint8 au8Payload[8];
-    au8Payload[0] = DEMO_ENDPOINT_MESSAGE_ID;
-    au8Payload[1] = sDemoData.sTransceiver.u8PrevRxBsn;
-    au8Payload[2] = sDemoData.sControls.u8Switch;
-    au8Payload[3] = sDemoData.sSensors.u8TempResult;
-    au8Payload[4] = sDemoData.sSensors.u8HtsResult;
-    au8Payload[5] = sDemoData.sSensors.u8AlsResult;
-    au8Payload[6] = 0;
-    au8Payload[7] = 0;
-    eJenie_SendData(0ULL,au8Payload,8,0);
 
 }
 
@@ -632,58 +622,6 @@ PRIVATE void vInitEndpoint(void)
  ****************************************************************************/
 PRIVATE void vProcessRead(void)
 {
-    uint16 u16LightSensor;
-    uint16 u16Diff;
-
-
-    /* Read light level, adjust to range 0-6. This sensor automatically starts
-       a new conversion afterwards so there is no need for a 'start read' */
-    u16LightSensor = u16ALSreadChannelResult();
-    /* Adjust the high and low values if necessary, and obtain the
-       difference between them */
-
-    if (sDemoData.sLightSensor.u16Hi < u16LightSensor)
-    {
-        sDemoData.sLightSensor.u16Hi = u16LightSensor;
-    }
-
-    if (sDemoData.sLightSensor.u16Lo > u16LightSensor)
-    {
-        sDemoData.sLightSensor.u16Lo = u16LightSensor;
-    }
-
-    u16Diff = sDemoData.sLightSensor.u16Hi - sDemoData.sLightSensor.u16Lo;
-
-    /* Work out the current value as a value between 0 and 6 within the
-       range of values that have been seen previously */
-    if (u16Diff)
-    {
-        sDemoData.sSensors.u8AlsResult = (uint8)(((uint32)(u16LightSensor - sDemoData.sLightSensor.u16Lo) * 6) / (uint32)u16Diff);
-    }
-    else
-    {
-        sDemoData.sSensors.u8AlsResult = 3;
-    }
-
-    /* Set LED 1 based on light level */
-    if ((sDemoData.sSensors.u8AlsResult <= sDemoData.sControls.u8LightAlarmLevel)
-        && (sDemoData.sControls.u8LightAlarmLevel < 7))
-    {
-        vLedControl(LED2, TRUE);
-    }
-    else
-    {
-        vLedControl(LED2, FALSE);
-    }
-
-    /* Read temperature, 0-52 are acceptable. Polls until result received */
-    vHTSstartReadTemp();
-    sDemoData.sSensors.u8TempResult = u8FindMin((uint8)u16HTSreadTempResult(), 52);
-
-
-    /* Read humidity, 0-104 are acceptable. Polls until result received */
-    vHTSstartReadHumidity();
-    sDemoData.sSensors.u8HtsResult = u8FindMin((uint8)u16HTSreadHumidityResult(), 104);
 }
 
 /****************************************************************************
