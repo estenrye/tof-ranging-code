@@ -69,7 +69,7 @@
 #define LED2                        1
 
 /* define if using high power modules */
-/* #define HIGH_POWER */
+//#define HIGH_POWER TRUE
 /****************************************************************************/
 /***        Type Definitions                                              ***/
 /****************************************************************************/
@@ -85,7 +85,6 @@ typedef struct
 {
     uint64 u64DestAddr;
     uint64 u64ParentAddr;
-    uint64 u64LocalAddr;
     bool_t bAppTimerStarted;
     bool_t bStackReady;
     uint8 eAppState;
@@ -171,9 +170,7 @@ PRIVATE uint8 u8FindMin(uint8 u8Val1, uint8 u8Val2);
  ****************************************************************************/
 PUBLIC void vJenie_CbConfigureNetwork(void)
 {
-	vUtils_Init();
-	vUtils_Debug("vJenie_CbConfigureNetwork");
-/* Set PAN_ID and other network stuff or defaults will be used */
+    /* Set PAN_ID and other network stuff or defaults will be used */
     gJenie_NetworkApplicationID =   0xdeaddead;
     gJenie_PanID                =   DEMO_PAN_ID;
     gJenie_EndDevicePollPeriod  =   10;
@@ -185,6 +182,7 @@ PUBLIC void vJenie_CbConfigureNetwork(void)
 PUBLIC void vJenie_CbInit(bool_t bWarmStart)
 {
 
+    vUtils_Init();
 
     if(bWarmStart==FALSE)
     {
@@ -390,9 +388,7 @@ PUBLIC void vJenie_CbStackMgmtEvent(teEventType eEventType, void *pvEventPrim)
     case E_JENIE_NETWORK_UP:
 		vUtils_Debug("E_JENIE_NETWORK_UP");
         sHomeData.u64ParentAddr = ((tsNwkStartUp*)pvEventPrim)->u64ParentAddress;
-        sHomeData.u64LocalAddr = ((tsNwkStartUp*)pvEventPrim)->u64LocalAddress;
 		vUtils_DisplayMsg("New parent:",(uint32)sHomeData.u64ParentAddr);
-        vUtils_DisplayMsg("Local Addr:", (uint32)sHomeData.u64LocalAddr);
 		vUtils_Debug("Network Up");
         sHomeData.bStackReady=TRUE;
         bTimeOut=TRUE;
@@ -494,7 +490,9 @@ PUBLIC void vJenie_CbStackDataEvent(teEventType eEventType, void *pvEventPrim)
 
     default:
         /*Unknown data event type */
-		vUtils_Debug("Unknown Data Event");
+        #ifdef DEBUG
+            vUtils_Debug("Unknown Data Event");
+        #endif
         break;
     }
 }
@@ -515,7 +513,6 @@ PUBLIC void vJenie_CbStackDataEvent(teEventType eEventType, void *pvEventPrim)
  ****************************************************************************/
 PRIVATE void vProcessTxData(void)
 {
-    vUtils_Debug("vProcessTxData");
     uint8 au8Payload[8];
     au8Payload[0] = DEMO_ENDPOINT_MESSAGE_ID;
     au8Payload[1] = sDemoData.sTransceiver.u8PrevRxBsn;
@@ -544,7 +541,6 @@ PRIVATE void vProcessTxData(void)
  ****************************************************************************/
 PRIVATE void vTxRegister(void)
 {
-    vUtils_Debug("vTxRegister");
     uint8 au8Payload[1];
     au8Payload[0] = DEMO_ENDPOINT_JOIN_ID;
     eJenie_SendData(0ULL,au8Payload,1,TXOPTION_ACKREQ);
@@ -581,7 +577,6 @@ PUBLIC void vJenie_CbHwEvent(uint32 u32DeviceId,uint32 u32ItemBitmap)
     else if ( (u32DeviceId == E_AHI_DEVICE_SYSCTRL)
                 && (u32ItemBitmap & E_AHI_SYSCTRL_WK1_MASK) )
     {
-        vUtils_Debug("vJenie_CbHwEvent");        
         bTimeOut = TRUE;
     }
 }
@@ -601,7 +596,6 @@ PUBLIC void vJenie_CbHwEvent(uint32 u32DeviceId,uint32 u32ItemBitmap)
  ****************************************************************************/
 PRIVATE void vInitEndpoint(void)
 {
-    vUtils_Debug("vInitEndpoint");
     /* Set defaults for software */
     sDemoData.sControls.u8Switch = 0;
     sDemoData.sControls.u8LightAlarmLevel = 0;
@@ -638,7 +632,6 @@ PRIVATE void vInitEndpoint(void)
  ****************************************************************************/
 PRIVATE void vProcessRead(void)
 {
-    vUtils_Debug("vProcessRead");
     uint16 u16LightSensor;
     uint16 u16Diff;
 
