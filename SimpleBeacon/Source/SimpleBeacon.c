@@ -46,9 +46,6 @@
 #include <jendefs.h>
 #include <AppHardwareApi.h>
 #include <string.h>
-#include "AlsDriver.h"
-#include "HtsDriver.h"
-#include "HomeSensorConfig.h"
 #include "Button.h"
 #include "LedControl.h"
 #include "Jenie.h"
@@ -70,6 +67,10 @@
 
 /* define if using high power modules */
 //#define HIGH_POWER TRUE
+
+/* networking values */
+#define DEMO_PAN_ID                       0x0e1c
+
 /****************************************************************************/
 /***        Type Definitions                                              ***/
 /****************************************************************************/
