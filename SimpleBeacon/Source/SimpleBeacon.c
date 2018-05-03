@@ -531,9 +531,6 @@ PRIVATE void vProcessTxData(void)
  ****************************************************************************/
 PRIVATE void vTxRegister(void)
 {
-    uint8 au8Payload[1];
-    au8Payload[0] = DEMO_ENDPOINT_JOIN_ID;
-    eJenie_SendData(0ULL,au8Payload,1,TXOPTION_ACKREQ);
 }
 
 /****************************************************************************
@@ -553,18 +550,7 @@ PRIVATE void vTxRegister(void)
  ****************************************************************************/
 PUBLIC void vJenie_CbHwEvent(uint32 u32DeviceId,uint32 u32ItemBitmap)
 {
-    /* Not used in this application */
-    if ((u32DeviceId == E_AHI_DEVICE_SYSCTRL)
-                && (u32ItemBitmap & E_AHI_DIO9_INT))
-    {
-        sDemoData.sControls.u8Switch = 0;
-    }
-    else if((u32DeviceId == E_AHI_DEVICE_SYSCTRL)
-                && (u32ItemBitmap & E_AHI_DIO10_INT))
-    {
-        sDemoData.sControls.u8Switch = 1;
-    }
-    else if ( (u32DeviceId == E_AHI_DEVICE_SYSCTRL)
+	if ( (u32DeviceId == E_AHI_DEVICE_SYSCTRL)
                 && (u32ItemBitmap & E_AHI_SYSCTRL_WK1_MASK) )
     {
         bTimeOut = TRUE;
