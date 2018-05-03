@@ -151,10 +151,6 @@ PRIVATE bool_t bTimeOut;
 /***        Local Function Prototypes                                     ***/
 /****************************************************************************/
 PRIVATE void vProcessTxData(void);
-PRIVATE void vTxRegister(void);
-PRIVATE void vInitEndpoint(void);
-PRIVATE void vProcessRead(void);
-PRIVATE uint8 u8FindMin(uint8 u8Val1, uint8 u8Val2);
 
 /* Stack to application callback functions */
 /****************************************************************************
@@ -189,7 +185,6 @@ PUBLIC void vJenie_CbInit(bool_t bWarmStart)
         (void)u32AHI_Init();
         sHomeData.bStackReady=FALSE;
         /* Initialise buttons, LEDs and program variables */
-        vInitEndpoint();
         /* Set DIO for buttons and LEDs */
         vLedControl(LED1, FALSE);
         vLedControl(LED2, FALSE);
@@ -325,7 +320,6 @@ PUBLIC void vJenie_CbMain(void)
 			vUtils_Debug("E_STATE_REGISTER");
             if(loop_count % REGISTER_FLASH_RATE == 0)
             {
-                vTxRegister();
                 vLedControl(LED1,phase);
                 phase ^= 1;
                 #ifdef NO_SLEEP
@@ -337,7 +331,6 @@ PUBLIC void vJenie_CbMain(void)
 
         case E_STATE_RUNNING:
 			vUtils_Debug("E_STATE_RUNNING");
-            vProcessRead();
             if(loop_count % RUNNING_FLASH_RATE == 0)
             {
                 vLedControl(LED1,phase);
@@ -518,23 +511,6 @@ PRIVATE void vProcessTxData(void)
 
 /****************************************************************************
  *
- * NAME: vTxRegister
- *
- * DESCRIPTION:
- * Requests transmission of registration message
- *
- * PARAMETERS:      Name            RW  Usage
- *
- * RETURNS:
- * void
- *
- ****************************************************************************/
-PRIVATE void vTxRegister(void)
-{
-}
-
-/****************************************************************************
- *
  * NAME: vJenie_HwEvent
  *
  * DESCRIPTION:
@@ -557,79 +533,3 @@ PUBLIC void vJenie_CbHwEvent(uint32 u32DeviceId,uint32 u32ItemBitmap)
     }
 }
 
-/****************************************************************************
- *
- * NAME: vInitEndpoint
- *
- * DESCRIPTION:
- * Initialises the nodes state
- *
- * PARAMETERS:      Name            RW  Usage
- *
- * RETURNS:
- * void
- *
- ****************************************************************************/
-PRIVATE void vInitEndpoint(void)
-{
-    /* Set defaults for software */
-    sDemoData.sControls.u8Switch = 0;
-    sDemoData.sControls.u8LightAlarmLevel = 0;
-    sDemoData.sSensors.u8TempResult = 0;
-    sDemoData.sSensors.u8HtsResult = 0;
-    sDemoData.sSensors.u8AlsResult = 0;
-    sDemoData.sSystem.eState = E_STATE_OFF;
-    sDemoData.sSystem.u16ShortAddr = 0xffff;
-    sDemoData.sSystem.u8ThisNode = 0;
-
-    /* Set light sensor values to 'wrong' ends of range, so the first time
-       a value is read they will get updated */
-    sDemoData.sLightSensor.u16Hi = 0;
-    sDemoData.sLightSensor.u16Lo = 65535;
-}
-
-/****************************************************************************
- *
- * NAME: vProcessRead
- *
- * DESCRIPTION:
- * Gets the current readings from each sensor. If the light level causes the
- * low light alarm to be triggered, an LED is illuminated.
- *
- * RETURNS:
- * void
- *
- * NOTES:
- * This is not an efficient way to read the sensors as much time is wasted
- * waiting for the humidity and temperature sensor to complete. The sensor
- * pulls a DIO line low when it is ready, and this could be used to generate
- * an interrupt to indicate when data is ready to be read.
- *
- ****************************************************************************/
-PRIVATE void vProcessRead(void)
-{
-}
-
-/****************************************************************************
- *
- * NAME: u8FindMin
- *
- * DESCRIPTION:
- * Returns the smallest of two values.
- *
- * PARAMETERS:      Name    RW  Usage
- *                  u8Val1  R   First value to compare
- *                  u8Val2  R   Second value to compare
- *
- * RETURNS:
- * uint8, lowest of two input values
- *
- ****************************************************************************/
-PRIVATE uint8 u8FindMin(uint8 u8Val1, uint8 u8Val2)
-{
-    if (u8Val1 < u8Val2)
-    {
-        return u8Val1;
-    }
-    return u8Val2;
-}
