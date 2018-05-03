@@ -232,7 +232,6 @@ PRIVATE void vProcessUpdateBlock(void);
 
 PRIVATE void vBuildSetChannelScreen(void);
 PRIVATE void vUpdateSetChannelScreen(void);
-PRIVATE void vBuildSetupScreen(void);
 PRIVATE void vUpdateSetupScreen(uint8 u8Selection, bool_t boUpdate);
 PRIVATE void vBuildNetworkScreen(teSensor eSensor);
 PRIVATE void vUpdateNetworkScreen(teSensor eSensor);
@@ -262,8 +261,6 @@ PRIVATE void vSetTimer(void);
 PRIVATE void vSetTimer1(void);
 
 PRIVATE void vProcessRegisterChildNode(uint64 u64SrcAddress);
-
-PUBLIC void vUTIL_NumToString(uint32 u32Data, char *pcString);
 
 
 /* Stack to application callback functions */
@@ -398,7 +395,6 @@ PUBLIC void vJenie_CbMain(void)
 
             if (sDemoData.sSystem.eState == E_STATE_SETUP_SCREEN)
             {
-                vBuildSetupScreen();
             }
             else
             {
@@ -1506,42 +1502,6 @@ PRIVATE void vUpdateNodeControlScreen(uint8 u8Node, uint8 u8Selection,
 
 /****************************************************************************
  *
- * NAME: vBuildSetupScreen
- *
- * DESCRIPTION:
- * Builds the text for the Setup screen, then uses the update function
- * to show the values for each adjustable parameter in turn.
- *
- * RETURNS:
- * void
- *
- ****************************************************************************/
-PRIVATE void vBuildSetupScreen(void)
-{
-    char acString[9];
-
-    vLcdClear();
-    vLcdWriteText("Settings", 0, 0);
-    vLcdWriteText("Select", 7, 0);
-    vLcdWriteText("\\", 7, 47);
-    vLcdWriteText("]", 7, 74);
-    vLcdWriteText("Done", 7, 103);
-
-    /* Display version numbers */
-    vLcdWriteText("MAC library", 4, 0);
-    vUTIL_NumToString(sDemoData.sSystem.u32AppApiVersion, acString);
-    vLcdWriteText(acString, 4, 75);
-    vLcdWriteText("Jenie version", 5, 0);
-    vUTIL_NumToString(sDemoData.sSystem.u32JenieVersion, acString);
-    vLcdWriteText(acString, 5, 75);
-
-    /* Update node control screen multiple times to display all the data */
-    vUpdateSetupScreen(1, FALSE);
-    vUpdateSetupScreen(0, TRUE);
-}
-
-/****************************************************************************
- *
  * NAME: vUpdateSetupScreen
  *
  * DESCRIPTION:
@@ -2220,38 +2180,6 @@ PRIVATE void vWriteRowLabel(uint8 u8Selection, char **ppcRowName, uint8 u8ListLe
     vLcdWriteInvertedText((char *)ppcRowName[u8Selection], u8Selection + 1, 0);
 }
 
-/****************************************************************************
- *
- * NAME: vNumToString
- *
- * DESCRIPTION:
- * Converts a 32 bit value to a hexadecimal string.
- *
- * PARAMETERS:  Name      RW  Usage
- *              u32Data   R   Value to convert
- *              pcString  W   Store for string. Must be at least 9 characters
- *
- * RETURNS:
- * void
- *
- ****************************************************************************/
-PUBLIC void vUTIL_NumToString(uint32 u32Data, char *pcString)
-{
-    int    i;
-    uint8  u8Nybble;
-
-    for (i = 28; i >= 0; i -= 4)
-    {
-        u8Nybble = (uint8)((u32Data >> i) & 0x0f);
-        u8Nybble += 0x30;
-        if (u8Nybble > 0x39)
-            u8Nybble += 7;
-
-        *pcString = u8Nybble;
-        pcString++;
-    }
-    *pcString = 0;
-}
 
 /****************************************************************************
  *
