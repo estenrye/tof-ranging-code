@@ -234,22 +234,17 @@ PRIVATE void vBuildSetChannelScreen(void);
 PRIVATE void vUpdateSetChannelScreen(void);
 PRIVATE void vBuildNetworkScreen(teSensor eSensor);
 PRIVATE void vUpdateNetworkScreen(teSensor eSensor);
-PRIVATE void vUpdateNodeScreen(uint8 u8Node);
 PRIVATE void vLcdUpdateElement(tsNodeData *psNodeData, teSensor eSensor,
                                uint8 u8Row, uint8 u8Col, bool_t bShowLinkStatus);
 PRIVATE void vDrawGraph(uint8 *pu8GraphData, uint8 u8StartCol,
                         uint8 u8StartRow);
 PRIVATE void vStringCopy(char *pcFrom,char *pcTo);
 PRIVATE void vValToDec(char *pcOutString, uint8 u8Value, char *pcLabel);
-PRIVATE void vAdjustAlarm(uint8 *pu8Value, uint8 u8MaxValue, uint8 u8OffValue, bool_t bUpNotDown);
+PRIVATE void button_adjustChannel(uint8 *pu8Value, uint8 u8MaxValue, uint8 u8OffValue, bool_t bUpNotDown);
 PRIVATE uint8 u8UpdateTimeBlock(uint8 u8TimeBlock);
 PRIVATE void vProcessSetChannelKeyPress(uint8 u8KeyMap);
-PRIVATE void vProcessNetworkKeyPress(uint8 u8KeyMap);
-PRIVATE void vProcessNodeKeyPress(uint8 u8KeyMap);
-PRIVATE void vUpdateNetworkSensor(teSensor eSensor);
 
 PRIVATE void vSetTimer(void);
-PRIVATE void vSetTimer1(void);
 
 
 /* Stack to application callback functions */
@@ -695,8 +690,6 @@ PRIVATE void vInitCoord(void)
 PRIVATE void vProcessCurrentTimeBlock(uint8 u8TimeBlock)
 {
     uint8 u8LocalSensor = 0;
-    uint16 u16LightSensor;
-    uint16 u16Diff;
 
     /* Process current block scheduled activity */
     switch (u8TimeBlock)
@@ -734,61 +727,6 @@ PRIVATE void vProcessCurrentTimeBlock(uint8 u8TimeBlock)
         }
         break;
 
-    case BLOCK_START_HUMIDITY:
-        /* Time to start a read of the humidity sensor */
-        vHTSstartReadHumidity();
-        break;
-
-    case BLOCK_READ_HUMIDITY:
-        /* Time to read the humidity sensor */
-        u8LocalSensor = (uint8)u16HTSreadHumidityResult();
-
-        if (u8LocalSensor > 104)
-        {
-            u8LocalSensor = 104;
-        }
-        if (sDemoData.sNode.bLocalNode)
-        {
-            sDemoData.sNode.asNodeData[0].asNodeElementData[E_SENSOR_HTS].u8NowValue = u8LocalSensor;
-        }
-        break;
-
-    case BLOCK_READ_LIGHT:
-        /* Time to read the light sensor. This sensor automatically starts
-            a new conversion afterwards so there is no need for a 'start read' */
-        u16LightSensor = u16ALSreadChannelResult();
-
-        /* Adjust the high and low values if necessary, and obtain the
-            difference between them */
-        if (sDemoData.sLightSensor.u16Hi < u16LightSensor)
-        {
-            sDemoData.sLightSensor.u16Hi = u16LightSensor;
-        }
-
-        if (sDemoData.sLightSensor.u16Lo > u16LightSensor)
-        {
-            sDemoData.sLightSensor.u16Lo = u16LightSensor;
-        }
-
-        u16Diff = sDemoData.sLightSensor.u16Hi - sDemoData.sLightSensor.u16Lo;
-
-        /* Work out the current value as a value between 0 and 6 within the
-        range of values that have been seen previously */
-        if (u16Diff)
-        {
-            u8LocalSensor = (uint8)(((uint32)(u16LightSensor - sDemoData.sLightSensor.u16Lo) * 6) / (uint32)u16Diff);
-        }
-        else
-        {
-            u8LocalSensor = 3;
-        }
-
-
-        if (sDemoData.sNode.bLocalNode)
-        {
-            sDemoData.sNode.asNodeData[0].asNodeElementData[E_SENSOR_ALS].u8NowValue = u8LocalSensor;
-        }
-        break;
     }
 }
 
@@ -879,10 +817,6 @@ PRIVATE void vProcessUpdateBlock(void)
         vUpdateNetworkScreen(sDemoData.sGui.eCurrentSensor);
         break;
 
-    case E_STATE_NODE:
-        vUpdateNodeScreen(sDemoData.sGui.u8CurrentNode);
-        break;
-
     default:
         break;
     }
@@ -931,14 +865,6 @@ PRIVATE bool_t bProcessKeys(uint8 *pu8Keys)
             /* Key presses depend on mode */
             switch (sDemoData.sSystem.eState)
             {
-            case E_STATE_NETWORK:
-                vProcessNetworkKeyPress(u8KeysDown);
-                break;
-
-            case E_STATE_NODE:
-                vProcessNodeKeyPress(u8KeysDown);
-                break;
-
             case E_STATE_SET_CHANNEL:
                 vProcessSetChannelKeyPress(u8KeysDown);
                 break;
@@ -1235,46 +1161,6 @@ PRIVATE void vLcdUpdateElement(tsNodeData *psNodeData, teSensor eSensor,
 
 /****************************************************************************
  *
- * NAME: vUpdateNodeScreen
- *
- * DESCRIPTION:
- * Draws the three sensor graphs for a node.
- *
- * PARAMETERS:      Name            RW  Usage
- *                  u8Node          R   Node to display
- *
- * RETURNS:
- * void
- *
- ****************************************************************************/
-PRIVATE void vUpdateNodeScreen(uint8 u8Node)
-{
-    tsNodeData *psNodeData;
-    char acString[8];
-
-    psNodeData = &sDemoData.sNode.asNodeData[u8Node];
-
-    /* Status */
-    if ((sDemoData.sNode.bLocalNode) && (u8Node != 0))
-    {
-        // vValToDec(acString, psNodeData->u8Rssi, "    ");
-        // vLcdWriteText(acString, 1, 0);
-
-        vValToDec(acString, psNodeData->u8FramesMissed - 1, "    ");
-        vLcdWriteText(acString, 1, 20);
-    }
-
-    /* Update graphs, alarms and values */
-    vLcdUpdateElement(psNodeData, E_SENSOR_TEMP, 4, 0, FALSE);
-    vLcdUpdateElement(psNodeData, E_SENSOR_HTS, 1, 64, FALSE);
-    vLcdUpdateElement(psNodeData, E_SENSOR_ALS, 4, 64, FALSE);
-
-    vLcdRefreshAll();
-}
-
-
-/****************************************************************************
- *
  * NAME: vDrawGraph
  *
  * DESCRIPTION:
@@ -1409,7 +1295,7 @@ PRIVATE void vValToDec(char *pcOutString, uint8 u8Value, char *pcLabel)
 
 /****************************************************************************
  *
- * NAME: vAdjustAlarm
+ * NAME: button_adjustChannel
  *
  * DESCRIPTION:
  * Increment a variable: If the variable is the maximum in the normal range,
@@ -1432,7 +1318,7 @@ PRIVATE void vValToDec(char *pcOutString, uint8 u8Value, char *pcLabel)
  * void
  *
  ****************************************************************************/
-PRIVATE void vAdjustAlarm(uint8 *pu8Value, uint8 u8MaxValue, uint8 u8OffValue,
+PRIVATE void button_adjustChannel(uint8 *pu8Value, uint8 u8MaxValue, uint8 u8OffValue,
                           bool_t bUpNotDown)
 {
     if (bUpNotDown)
@@ -1443,14 +1329,7 @@ PRIVATE void vAdjustAlarm(uint8 *pu8Value, uint8 u8MaxValue, uint8 u8OffValue,
         }
         else
         {
-            if ((*pu8Value == u8OffValue ) && (u8OffValue > u8MaxValue))
-            {
-                *pu8Value = 0;
-            }
-            else
-            {
-                *pu8Value = *pu8Value + 1;
-            }
+            *pu8Value = *pu8Value + 1;
         }
     }
     else
@@ -1470,112 +1349,6 @@ PRIVATE void vAdjustAlarm(uint8 *pu8Value, uint8 u8MaxValue, uint8 u8OffValue,
                 *pu8Value = *pu8Value - 1;
             }
         }
-    }
-}
-
-/****************************************************************************
- *
- * NAME: vUpdateNetworkSensor
- *
- * DESCRIPTION:
- * Simple function to save a little code. If the user presses a button on the
- * Network screen to select a sensor, this checks that the sensor is not the
- * same as the current sensor before updating the screen.
- *
- * PARAMETERS:      Name            RW  Usage
- *                  eSensor         R   New sensor to display
- *
- * RETURNS:
- * void
- *
- ****************************************************************************/
-PRIVATE void vUpdateNetworkSensor(teSensor eSensor)
-{
-    if (sDemoData.sGui.eCurrentSensor != eSensor)
-    {
-        sDemoData.sGui.eCurrentSensor = eSensor;
-        vBuildNetworkScreen(eSensor);
-    }
-}
-
-/****************************************************************************
- *
- * NAME: vProcessNodeKeyPress
- *
- * DESCRIPTION:
- * Handles button presses on the Node screens. The first button can move to
- * the next Node screen (if there are any more nodes) or back to the Network
- * screen. Another button selects the Node Control screen and the other two
- * toggle the state of the remote switch.
- *
- * PARAMETERS:      Name        RW  Usage
- *                  u8KeyMap    R   Current buttons pressed bitmap
- *
- * RETURNS:
- * void
- *
- ****************************************************************************/
-PRIVATE void vProcessNodeKeyPress(uint8 u8KeyMap)
-{
-    switch (u8KeyMap)
-    {
-    case E_KEY_0:
-        /* Node button: go to next node or network screen */
-        sDemoData.sGui.u8CurrentNode++;
-        if (sDemoData.sGui.u8CurrentNode == sDemoData.sNode.u8AssociatedNodes)
-        {
-            sDemoData.sSystem.eState = E_STATE_NETWORK;
-            sDemoData.sGui.eCurrentSensor = E_SENSOR_TEMP;
-            vBuildNetworkScreen(E_SENSOR_TEMP);
-        }
-        break;
-
-    case E_KEY_2:
-        /* On button */
-        sDemoData.sNode.asNodeData[sDemoData.sGui.u8CurrentNode].boDeviceOn = TRUE;
-        break;
-
-    case E_KEY_3:
-        /* Off button */
-        sDemoData.sNode.asNodeData[sDemoData.sGui.u8CurrentNode].boDeviceOn = FALSE;
-        break;
-    }
-}
-
-/****************************************************************************
- *
- * NAME: vProcessNetworkKeyPress
- *
- * DESCRIPTION:
- * Handles button presses on the Network screen. The buttons can move onto
- * the first Node screen (if there are any nodes) or select a particular
- * sensor.
- *
- * PARAMETERS:      Name        RW  Usage
- *                  u8KeyMap    R   Current buttons pressed bitmap
- *
- * RETURNS:
- * void
- *
- ****************************************************************************/
-PRIVATE void vProcessNetworkKeyPress(uint8 u8KeyMap)
-{
-    switch (u8KeyMap)
-    {
-    case E_KEY_1:
-        /* Temp button: change if not already there */
-        vUpdateNetworkSensor(E_SENSOR_TEMP);
-        break;
-
-    case E_KEY_2:
-        /* Humidity button: change if not already there */
-        vUpdateNetworkSensor(E_SENSOR_HTS);
-        break;
-
-    case E_KEY_3:
-        /* Temp button: change if not already there */
-        vUpdateNetworkSensor(E_SENSOR_ALS);
-        break;
     }
 }
 
@@ -1611,7 +1384,7 @@ PRIVATE void vProcessSetChannelKeyPress(uint8 u8KeyMap)
     case E_KEY_2:
         /* Minus button: decrement value */
 
-        vAdjustAlarm(&sDemoData.sSystem.u8Channel, CHANNEL_MAX, CHANNEL_MIN, u8KeyMap == E_KEY_1);
+        button_adjustChannel(&sDemoData.sSystem.u8Channel, CHANNEL_MAX, CHANNEL_MIN, u8KeyMap == E_KEY_1);
         vUpdateSetChannelScreen();
         break;
 
@@ -1677,11 +1450,3 @@ PRIVATE void vSetTimer(void)
     /* Set timer for next block */
     vAHI_WakeTimerStart(E_AHI_WAKE_TIMER_0, sDemoData.sSystem.u32CalibratedTimeout);
 }
-
-
-PRIVATE void vSetTimer1(void)
-{
-    /* Set timer for next block */
-    vAHI_WakeTimerStart(E_AHI_WAKE_TIMER_0, sDemoData.sSystem.u32CalibratedTimeout*3);
-}
-
