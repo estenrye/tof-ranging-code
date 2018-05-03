@@ -234,7 +234,6 @@ PRIVATE void vBuildSetChannelScreen(void);
 PRIVATE void vUpdateSetChannelScreen(void);
 PRIVATE void vBuildNetworkScreen(teSensor eSensor);
 PRIVATE void vUpdateNetworkScreen(teSensor eSensor);
-PRIVATE void vBuildNodeScreen(uint8 u8Node);
 PRIVATE void vUpdateNodeScreen(uint8 u8Node);
 PRIVATE void vLcdUpdateElement(tsNodeData *psNodeData, teSensor eSensor,
                                uint8 u8Row, uint8 u8Col, bool_t bShowLinkStatus);
@@ -247,13 +246,10 @@ PRIVATE uint8 u8UpdateTimeBlock(uint8 u8TimeBlock);
 PRIVATE void vProcessSetChannelKeyPress(uint8 u8KeyMap);
 PRIVATE void vProcessNetworkKeyPress(uint8 u8KeyMap);
 PRIVATE void vProcessNodeKeyPress(uint8 u8KeyMap);
-PRIVATE void vProcessNodeControlKeyPress(uint8 u8KeyMap);
 PRIVATE void vUpdateNetworkSensor(teSensor eSensor);
 
 PRIVATE void vSetTimer(void);
 PRIVATE void vSetTimer1(void);
-
-PRIVATE void vProcessRegisterChildNode(uint64 u64SrcAddress);
 
 
 /* Stack to application callback functions */
@@ -495,55 +491,6 @@ PUBLIC void vJenie_CbStackMgmtEvent(teEventType eEventType, void *pvEventPrim)
     vUtils_Debug("exiting vJenie_CbStackMgmtEvent");
 }
 
-
-PRIVATE void vProcessRegisterChildNode(uint64 u64SrcAddress)
-{
-    uint8              u8Node;
-    uint8              u8AssocStatus;
-    uint16             u16ShortAddress;
-    /* Check if already associated (idiot proofing) */
-    u8Node = 0;
-    u16ShortAddress = 0xffff;
-
-    while (u8Node < sDemoData.sNode.u8AssociatedNodes)
-    {
-        if (u64SrcAddress == sDemoData.sNode.asAssocNodes[u8Node].u64ExtAddr)
-        {
-            /* Already in system: give it same short address */
-            u16ShortAddress = sDemoData.sNode.asAssocNodes[u8Node].u16ShortAddr;
-        }
-        u8Node++;
-    }
-    /* Assume association succeeded */
-    u8AssocStatus = 0;
-    if (u16ShortAddress == 0xffff)
-    {
-        if (sDemoData.sNode.u8AssociatedNodes < DEMO_ENDPOINTS)
-        {
-            /* Allocate short address as next in list */
-            u16ShortAddress = DEMO_ENDPOINT_ADDR_BASE + sDemoData.sNode.u8AssociatedNodes;
-            /* Store details for future use */
-            sDemoData.sNode.asAssocNodes[sDemoData.sNode.u8AssociatedNodes].u64ExtAddr = u64SrcAddress;
-            sDemoData.sNode.asAssocNodes[sDemoData.sNode.u8AssociatedNodes].u16ShortAddr = u16ShortAddress;
-            sDemoData.sNode.u8AssociatedNodes++;
-        }
-        else
-        {
-            /* PAN access denied */
-            u8AssocStatus = 2;
-        }
-    }
-
-    /* Update display if necessary */
-    if (sDemoData.sSystem.eState == E_STATE_NETWORK)
-    {
-        vBuildNetworkScreen(sDemoData.sGui.eCurrentSensor);
-    }
-
-    vSetTimer1();
-    sHomeData.eAppState = E_STATE_WAITING;
-
-}
 
 /****************************************************************************
  *
@@ -992,10 +939,6 @@ PRIVATE bool_t bProcessKeys(uint8 *pu8Keys)
                 vProcessNodeKeyPress(u8KeysDown);
                 break;
 
-            case E_STATE_NODE_CONTROL:
-                vProcessNodeControlKeyPress(u8KeysDown);
-                break;
-
             case E_STATE_SET_CHANNEL:
                 vProcessSetChannelKeyPress(u8KeysDown);
                 break;
@@ -1289,35 +1232,6 @@ PRIVATE void vLcdUpdateElement(tsNodeData *psNodeData, teSensor eSensor,
     vDrawGraph(psNodeElementData->au8GraphData, (uint8)(u8Col + 27), u8Row);
 }
 
-/****************************************************************************
- *
- * NAME: vBuildNodeScreen
- *
- * DESCRIPTION:
- * Builds the text to appear on a Node screen, then uses the update function
- * to populate it with data.
- *
- * PARAMETERS:      Name            RW  Usage
- *                  u8Node          R   Node to display
- *
- * RETURNS:
- * void
- *
- ****************************************************************************/
-PRIVATE void vBuildNodeScreen(uint8 u8Node)
-{
-    vLcdClear();
-    vLcdWriteText((char *)apcNodeNameList[u8Node], 0, 0);
-    vLcdWriteText("Humidity", 0, 64);
-    vLcdWriteText("Temp", 3, 0);
-    vLcdWriteText("Light", 3, 64);
-    vLcdWriteText("Node", 7, 0);
-    vLcdWriteText("Control", 7, 29);
-    // vLcdWriteText("On", 7, 77);
-    // vLcdWriteText("Off", 7, 107);
-
-    vUpdateNodeScreen(u8Node);
-}
 
 /****************************************************************************
  *
@@ -1614,10 +1528,6 @@ PRIVATE void vProcessNodeKeyPress(uint8 u8KeyMap)
             sDemoData.sGui.eCurrentSensor = E_SENSOR_TEMP;
             vBuildNetworkScreen(E_SENSOR_TEMP);
         }
-        else
-        {
-            vBuildNodeScreen(sDemoData.sGui.u8CurrentNode);
-        }
         break;
 
     case E_KEY_2:
@@ -1631,75 +1541,6 @@ PRIVATE void vProcessNodeKeyPress(uint8 u8KeyMap)
         break;
     }
 }
-
-/****************************************************************************
- *
- * NAME: vProcessNodeControlKeyPress
- *
- * DESCRIPTION:
- * Handles button presses on the Node Control screen. The first button
- * selects which item to alter, the next two adjust the value up or down, and
- * the last button returns to the Node screen.
- *
- * PARAMETERS:      Name        RW  Usage
- *                  u8KeyMap    R   Current buttons pressed bitmap
- *
- * RETURNS:
- * void
- *
- ****************************************************************************/
-PRIVATE void vProcessNodeControlKeyPress(uint8 u8KeyMap)
-{
-    tsNodeData *psNodeData = &sDemoData.sNode.asNodeData[sDemoData.sGui.u8CurrentNode];
-    bool_t bUpNotDown;
-
-    switch (u8KeyMap)
-    {
-
-    case E_KEY_1:
-        /* Plus button: increment value */
-    case E_KEY_2:
-        /* Minus button: decrement value */
-
-        bUpNotDown = (u8KeyMap == E_KEY_1);
-
-        switch (sDemoData.sGui.u8ControlSelection)
-        {
-        case 0:
-            /* Temp high alarm */
-            vAdjustAlarm(&psNodeData->asNodeElementData[E_SENSOR_TEMP].u8HighAlarm,
-                         TEMP_HIGH_MAX, 0, bUpNotDown);
-            break;
-
-        case 1:
-            /* Temp low alarm */
-            vAdjustAlarm(&psNodeData->asNodeElementData[E_SENSOR_TEMP].u8LowAlarm,
-                         TEMP_HIGH_MAX, 255, bUpNotDown);
-            break;
-
-        case 2:
-            /* Light high alarm */
-            vAdjustAlarm(&psNodeData->asNodeElementData[E_SENSOR_ALS].u8HighAlarm,
-                         LIGHT_HIGH_MAX, 0, bUpNotDown);
-            break;
-
-        case 3:
-            /* Light low alarm */
-            vAdjustAlarm(&psNodeData->asNodeElementData[E_SENSOR_ALS].u8LowAlarm,
-                         LIGHT_HIGH_MAX, 255, bUpNotDown);
-            break;
-        }
-
-        break;
-
-    case E_KEY_3:
-        /* Done button: return to node screen */
-        sDemoData.sSystem.eState = E_STATE_NODE;
-        vBuildNodeScreen(sDemoData.sGui.u8CurrentNode);
-        break;
-    }
-}
-
 
 /****************************************************************************
  *
@@ -1721,16 +1562,6 @@ PRIVATE void vProcessNetworkKeyPress(uint8 u8KeyMap)
 {
     switch (u8KeyMap)
     {
-    case E_KEY_0:
-        /* Node button: go to node screen (if there are any nodes) */
-        if (sDemoData.sNode.u8AssociatedNodes > 0)
-        {
-            sDemoData.sSystem.eState = E_STATE_NODE;
-            sDemoData.sGui.u8CurrentNode = 0;
-            vBuildNodeScreen(sDemoData.sGui.u8CurrentNode);
-        }
-        break;
-
     case E_KEY_1:
         /* Temp button: change if not already there */
         vUpdateNetworkSensor(E_SENSOR_TEMP);
