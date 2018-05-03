@@ -232,13 +232,10 @@ PRIVATE void vProcessUpdateBlock(void);
 
 PRIVATE void vBuildSetChannelScreen(void);
 PRIVATE void vUpdateSetChannelScreen(void);
-PRIVATE void vUpdateSetupScreen(uint8 u8Selection, bool_t boUpdate);
 PRIVATE void vBuildNetworkScreen(teSensor eSensor);
 PRIVATE void vUpdateNetworkScreen(teSensor eSensor);
 PRIVATE void vBuildNodeScreen(uint8 u8Node);
 PRIVATE void vUpdateNodeScreen(uint8 u8Node);
-PRIVATE void vBuildNodeControlScreen(uint8 u8Node);
-PRIVATE void vUpdateNodeControlScreen(uint8 u8Node, uint8 u8Selection, bool_t boUpdate);
 PRIVATE void vLcdUpdateElement(tsNodeData *psNodeData, teSensor eSensor,
                                uint8 u8Row, uint8 u8Col, bool_t bShowLinkStatus);
 PRIVATE void vDrawGraph(uint8 *pu8GraphData, uint8 u8StartCol,
@@ -246,11 +243,7 @@ PRIVATE void vDrawGraph(uint8 *pu8GraphData, uint8 u8StartCol,
 PRIVATE void vStringCopy(char *pcFrom,char *pcTo);
 PRIVATE void vValToDec(char *pcOutString, uint8 u8Value, char *pcLabel);
 PRIVATE void vAdjustAlarm(uint8 *pu8Value, uint8 u8MaxValue, uint8 u8OffValue, bool_t bUpNotDown);
-PRIVATE void vWriteOnOff(bool_t bOnOff, uint8 u8Row, uint8 u8Col);
-PRIVATE void vToggleOnOff(bool_t *pbItem);
-PRIVATE void vWriteRowLabel(uint8 u8Selection, char **ppcRowName, uint8 u8ListLen);
 PRIVATE uint8 u8UpdateTimeBlock(uint8 u8TimeBlock);
-PRIVATE void vProcessSetupKeyPress(uint8 u8KeyMap);
 PRIVATE void vProcessSetChannelKeyPress(uint8 u8KeyMap);
 PRIVATE void vProcessNetworkKeyPress(uint8 u8KeyMap);
 PRIVATE void vProcessNodeKeyPress(uint8 u8KeyMap);
@@ -1007,10 +1000,6 @@ PRIVATE bool_t bProcessKeys(uint8 *pu8Keys)
                 vProcessSetChannelKeyPress(u8KeysDown);
                 break;
 
-            case E_STATE_SETUP_SCREEN:
-                vProcessSetupKeyPress(u8KeysDown);
-                break;
-
             default:
                 break;
             }
@@ -1369,179 +1358,6 @@ PRIVATE void vUpdateNodeScreen(uint8 u8Node)
     vLcdRefreshAll();
 }
 
-/****************************************************************************
- *
- * NAME: vBuildNodeControlScreen
- *
- * DESCRIPTION:
- * Builds the text for a Node Control screen, then uses the update function
- * to show the values for each adjustable parameter in turn.
- *
- * PARAMETERS:      Name            RW  Usage
- *                  u8Node          R   Node to display
- *
- * RETURNS:
- * void
- *
- ****************************************************************************/
-PRIVATE void vBuildNodeControlScreen(uint8 u8Node)
-{
-    vLcdClear();
-    vLcdWriteText((char *)apcNodeNameList[u8Node], 0, 0);
-    vLcdWriteText("Select", 7, 0);
-    vLcdWriteText("\\", 7, 47);
-    vLcdWriteText("]", 7, 74);
-    vLcdWriteText("Done", 7, 103);
-
-    /* Update node control screen multiple times to display all the data */
-    vUpdateNodeControlScreen(u8Node, 1, FALSE);
-    vUpdateNodeControlScreen(u8Node, 2, FALSE);
-    vUpdateNodeControlScreen(u8Node, 3, FALSE);
-    vUpdateNodeControlScreen(u8Node, 0, TRUE);
-}
-
-/****************************************************************************
- *
- * NAME: vUpdateNodeControlScreen
- *
- * DESCRIPTION:
- * Updates a single row of a Node Control screen. The row label is either
- * highlighted or normal text, and the value must be displayed with a symbol
- * after it or, for light levels, purely as a symbol.
- *
- * PARAMETERS:      Name            RW  Usage
- *                  u8Node          R   Node to display information for
- *                  u8Selection     R   Currently selected item (0-x)
- *                  boUpdate        R   TRUE if LCD should update afterwards
- *
- * RETURNS:
- * void
- *
- ****************************************************************************/
-PRIVATE void vUpdateNodeControlScreen(uint8 u8Node, uint8 u8Selection,
-                                      bool_t boUpdate)
-{
-    static const char *apcRowName[CONTROL_LIST_LEN] =
-        {
-            "Temp high alarm", "Temp low alarm", "Light high alarm",
-            "Light low alarm"
-        };
-    char acString[10];
-    tsNodeData *psNodeData = &sDemoData.sNode.asNodeData[u8Node];
-    uint8 u8Value;
-
-    /* Write row label highlighted, and previous row label in normal text */
-    vWriteRowLabel(u8Selection, (char **)apcRowName, CONTROL_LIST_LEN);
-
-    switch (u8Selection)
-    {
-    case 0:
-        u8Value = psNodeData->asNodeElementData[E_SENSOR_TEMP].u8HighAlarm;
-        if (u8Value == 0)
-        {
-            vLcdWriteText("off   ", 1, 90);
-        }
-        else
-        {
-            vValToDec(acString, u8Value, "[C   ");
-            vLcdWriteText(acString, 1, 90);
-        }
-        break;
-
-    case 1:
-        u8Value = psNodeData->asNodeElementData[E_SENSOR_TEMP].u8LowAlarm;
-        if (u8Value == 255)
-        {
-            vLcdWriteText("off   ", 2, 90);
-        }
-        else
-        {
-            vValToDec(acString, u8Value, "[C   ");
-            vLcdWriteText(acString, 2, 90);
-        }
-        break;
-
-    case 2:
-        u8Value = psNodeData->asNodeElementData[E_SENSOR_ALS].u8HighAlarm;
-        if (u8Value == 0)
-        {
-            vLcdWriteText("off", 3, 90);
-        }
-        else
-        {
-            acString[0] = '&' + u8Value;
-            acString[1] = ' ';
-            acString[2] = ' ';
-            acString[3] = '\0';
-            vLcdWriteText(acString, 3, 90);
-        }
-        break;
-
-    default:
-        u8Value = psNodeData->asNodeElementData[E_SENSOR_ALS].u8LowAlarm;
-        if (u8Value == 255)
-        {
-            vLcdWriteText("off", 4, 90);
-        }
-        else
-        {
-            acString[0] = '&' + u8Value;
-            acString[1] = ' ';
-            acString[2] = ' ';
-            acString[3] = '\0';
-            vLcdWriteText(acString, 4, 90);
-        }
-        break;
-    }
-
-    if (boUpdate)
-    {
-        vLcdRefreshAll();
-    }
-}
-
-/****************************************************************************
- *
- * NAME: vUpdateSetupScreen
- *
- * DESCRIPTION:
- * Updates a single row of the Setup screen. The row label is either
- * highlighted or normal text, and the values are always 'on' or 'off'.
- *
- * PARAMETERS:      Name            RW  Usage
- *                  u8Selection     R   Currently selected item (0-x)
- *                  boUpdate        R   TRUE if LCD should update afterwards
- *
- * RETURNS:
- * void
- *
- ****************************************************************************/
-PRIVATE void vUpdateSetupScreen(uint8 u8Selection, bool_t boUpdate)
-{
-    static const char *apcRowName[SETUP_LIST_LEN] =
-        {
-            "Local node", "Four nodes"
-        };
-
-    /* Write row label highlighted, and previous row label in normal text */
-    vWriteRowLabel(u8Selection, (char **)apcRowName, SETUP_LIST_LEN);
-
-    switch (u8Selection)
-    {
-    case 0:
-        vWriteOnOff(sDemoData.sNode.bLocalNode, 1, 75);
-        break;
-
-    case 1:
-        vWriteOnOff(sDemoData.sGui.bShowFourNodes, 2, 75);
-        break;
-    }
-
-    if (boUpdate)
-    {
-        vLcdRefreshAll();
-    }
-}
 
 /****************************************************************************
  *
@@ -1804,13 +1620,6 @@ PRIVATE void vProcessNodeKeyPress(uint8 u8KeyMap)
         }
         break;
 
-    case E_KEY_1:
-        /* Control screen button */
-        sDemoData.sSystem.eState = E_STATE_NODE_CONTROL;
-        sDemoData.sGui.u8ControlSelection = 0;
-        vBuildNodeControlScreen(sDemoData.sGui.u8CurrentNode);
-        break;
-
     case E_KEY_2:
         /* On button */
         sDemoData.sNode.asNodeData[sDemoData.sGui.u8CurrentNode].boDeviceOn = TRUE;
@@ -1846,11 +1655,6 @@ PRIVATE void vProcessNodeControlKeyPress(uint8 u8KeyMap)
 
     switch (u8KeyMap)
     {
-    case E_KEY_0:
-        /* Select button: move to next item in list */
-        vAdjustAlarm(&sDemoData.sGui.u8ControlSelection, CONTROL_LIST_LEN - 1, 0, TRUE);
-        vUpdateNodeControlScreen(sDemoData.sGui.u8CurrentNode, sDemoData.sGui.u8ControlSelection, TRUE);
-        break;
 
     case E_KEY_1:
         /* Plus button: increment value */
@@ -1886,7 +1690,6 @@ PRIVATE void vProcessNodeControlKeyPress(uint8 u8KeyMap)
             break;
         }
 
-        vUpdateNodeControlScreen(sDemoData.sGui.u8CurrentNode, sDemoData.sGui.u8ControlSelection, TRUE);
         break;
 
     case E_KEY_3:
@@ -1897,72 +1700,6 @@ PRIVATE void vProcessNodeControlKeyPress(uint8 u8KeyMap)
     }
 }
 
-
-/****************************************************************************
- *
- * NAME: vProcessSetupKeyPress
- *
- * DESCRIPTION:
- * Handles button presses on the Setup screen. The first button
- * selects which item to alter, the next two adjust the value up or down, and
- * the last button puts the device into running mode, starting the beacons
- * and moving to the Network screen.
- *
- * PARAMETERS:      Name        RW  Usage
- *                  u8KeyMap    R   Current buttons pressed bitmap
- *
- * RETURNS:
- * void
- *
- ****************************************************************************/
-PRIVATE void vProcessSetupKeyPress(uint8 u8KeyMap)
-{
-    switch (u8KeyMap)
-    {
-    case E_KEY_0:
-        /* Select button: move to next item in list */
-        vAdjustAlarm(&sDemoData.sGui.u8SetupSelection, SETUP_LIST_LEN - 1, 0, TRUE);
-        vUpdateSetupScreen(sDemoData.sGui.u8SetupSelection, TRUE);
-        break;
-
-    case E_KEY_1:
-        /* Plus button: increment value */
-    case E_KEY_2:
-        /* Minus button: decrement value */
-
-        switch (sDemoData.sGui.u8SetupSelection)
-        {
-        case 0:
-            /* Local node */
-            vToggleOnOff(&sDemoData.sNode.bLocalNode);
-            vLedControl(0,!sDemoData.sNode.bLocalNode);
-            break;
-
-        case 1:
-            /* Four node selection */
-            vToggleOnOff(&sDemoData.sGui.bShowFourNodes);
-            vLedControl(3,sDemoData.sGui.bShowFourNodes);
-            break;
-        }
-
-        vUpdateSetupScreen(sDemoData.sGui.u8SetupSelection, TRUE);
-        break;
-
-    case E_KEY_3:
-        /* Done button: start beaconing and go to network screen. If
-           local node is not being used, number of associated nodes is 0,
-           as none can have associated yet, otherwise it is 1 as set during
-           initialisation */
-        if (sDemoData.sNode.bLocalNode == FALSE)
-        {
-            sDemoData.sNode.u8AssociatedNodes = 0;
-        }
-        // vStartBeacon();
-        sDemoData.sSystem.eState = E_STATE_NETWORK;
-        vBuildNetworkScreen(sDemoData.sGui.eCurrentSensor);
-        break;
-    }
-}
 
 /****************************************************************************
  *
@@ -2091,95 +1828,6 @@ PRIVATE uint8 u8UpdateTimeBlock(uint8 u8TimeBlock)
 
     return u8TimeBlock;
 }
-/****************************************************************************
- *
- * NAME: vWriteOnOff
- *
- * DESCRIPTION:
- * Displays the text 'on' or 'off' at the specified location on the screen.
- * The 'on' text includes two spaces to overwrite any previous 'off' text
- * completely.
- *
- * PARAMETERS:      Name            RW  Usage
- *                  bOnOff  R   TRUE for on, FALSE for off
- *                  u8Row   R   Character row for string
- *                  u8Col   R   Pixel column for string
- *
- * RETURNS:
- * void
- *
- ****************************************************************************/
-PRIVATE void vWriteOnOff(bool_t bOnOff, uint8 u8Row, uint8 u8Col)
-{
-    static const char *apcOnOff[2] =
-        {"off", "on  "
-        };
-
-    vLcdWriteText((char *)apcOnOff[bOnOff], u8Row, u8Col);
-}
-
-/****************************************************************************
- *
- * NAME: vToggleOnOff
- *
- * DESCRIPTION:
- * Toggles a value between TRUE and FALSE.
- *
- * PARAMETERS:      Name            RW  Usage
- *                  pbItem          W   Pointer to boolean to toggle
- *
- * RETURNS:
- * void
- *
- ****************************************************************************/
-PRIVATE void vToggleOnOff(bool_t *pbItem)
-{
-    if (*pbItem == TRUE)
-    {
-        *pbItem = FALSE;
-    }
-    else
-    {
-        *pbItem = TRUE;
-    }
-}
-
-/****************************************************************************
- *
- * NAME: vWriteRowLabel
- *
- * DESCRIPTION:
- * Used by the screen update functions, this takes an array of row labels and
- * displays the selected on as highlighted and the previous one as normal.
- * This is required when the user selects the next item in a list.
- *
- * PARAMETERS:      Name            RW  Usage
- *                  u8Selection     R   Selected row (0-x)
- *                  ppcRowName      R   Array of pointers to label strings
- *                  u8ListLen       R   Length of list
- *
- * RETURNS:
- * void
- *
- ****************************************************************************/
-PRIVATE void vWriteRowLabel(uint8 u8Selection, char **ppcRowName, uint8 u8ListLen)
-{
-    uint8 u8PrevRow;
-
-    if (u8Selection == 0)
-    {
-        u8PrevRow = u8ListLen;
-    }
-    else
-    {
-        u8PrevRow = u8Selection;
-    }
-
-    vLcdWriteText((char *)ppcRowName[u8PrevRow - 1], u8PrevRow, 0);
-
-    vLcdWriteInvertedText((char *)ppcRowName[u8Selection], u8Selection + 1, 0);
-}
-
 
 /****************************************************************************
  *
