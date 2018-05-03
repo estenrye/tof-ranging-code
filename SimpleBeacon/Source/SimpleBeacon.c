@@ -79,8 +79,8 @@
 /****************************************************************************/
 typedef enum
 {
-	E_BEACON_0,
-	E_BEACON_1
+	E_BEACON_0 = 0,
+	E_BEACON_1 = 1
 } teBeaconAssignment;
 
 /* Button values */
@@ -102,6 +102,8 @@ typedef struct
 {
 	struct
 	{
+		int iFlashingLedIndex;
+		teBeaconAssignment eBeaconAssignment;
 		uint64 u64DestAddr;
 		uint64 u64ParentAddr;
 		bool_t bAppTimerStarted;
@@ -130,6 +132,8 @@ PRIVATE bool_t bTimeOut;
 /****************************************************************************/
 /***        Local Function Prototypes                                     ***/
 /****************************************************************************/
+PRIVATE void interrupt_ProcessRxData(tsData *sData);
+PRIVATE void data_ProcessBeaconAssignmentMessage(tsData *sData);
 
 /* Stack to application callback functions */
 /****************************************************************************
@@ -148,7 +152,7 @@ PUBLIC void vJenie_CbConfigureNetwork(void)
     /* Set PAN_ID and other network stuff or defaults will be used */
     gJenie_NetworkApplicationID =   0xdeaddead;
     gJenie_PanID                =   DEMO_PAN_ID;
-    gJenie_EndDevicePollPeriod  =   10;
+    gJenie_EndDevicePollPeriod  =   3;
     gJenie_EndDeviceScanSleep   =   100;
 
     gJenie_RoutingEnabled       = FALSE;
@@ -165,6 +169,7 @@ PUBLIC void vJenie_CbInit(bool_t bWarmStart)
         sDemoData.sState.bStackReady=FALSE;
         /* Initialise buttons, LEDs and program variables */
         /* Set DIO for buttons and LEDs */
+		sDemoData.sState.iFlashingLedIndex = LED1;
         vLedControl(LED1, FALSE);
         vLedControl(LED2, FALSE);
         vLedInitRfd();
@@ -273,7 +278,7 @@ PUBLIC void vJenie_CbMain(void)
 			vUtils_Debug("E_STATE_REGISTER");
             if(loop_count % REGISTER_FLASH_RATE == 0)
             {
-                vLedControl(LED1,phase);
+                vLedControl(sDemoData.sState.iFlashingLedIndex,phase);
                 phase ^= 1;
                 #ifdef NO_SLEEP
                     /* Manually poll parent as not sleeping */
@@ -286,7 +291,7 @@ PUBLIC void vJenie_CbMain(void)
 			vUtils_Debug("E_STATE_RUNNING");
             if(loop_count % RUNNING_FLASH_RATE == 0)
             {
-                vLedControl(LED1,phase);
+                vLedControl(sDemoData.sState.iFlashingLedIndex,phase);
                 phase ^= 1;
             }
             if(loop_count % RUNNING_TRANSMIT_RATE == 0)
@@ -362,7 +367,6 @@ PUBLIC void vJenie_CbStackMgmtEvent(teEventType eEventType, void *pvEventPrim)
     case E_JENIE_CHILD_JOINED:
         vUtils_Debug("E_JENIE_CHILD_JOINED");
         vUtils_DisplayMsg("Child Joined: ",(uint32)(((tsChildJoined*)pvEventPrim)->u64SrcAddress));
-        tsChildJoined *joinEvent = ((tsChildJoined*) pvEventPrim);
         break;
 
     case E_JENIE_CHILD_LEAVE:
@@ -413,6 +417,7 @@ PUBLIC void vJenie_CbStackDataEvent(teEventType eEventType, void *pvEventPrim)
     {
     case E_JENIE_DATA:
 		vUtils_Debug("E_JENIE_DATA");
+		interrupt_ProcessRxData(pvEventPrim);
         break;
 
     case E_JENIE_DATA_TO_SERVICE:
@@ -422,11 +427,6 @@ PUBLIC void vJenie_CbStackDataEvent(teEventType eEventType, void *pvEventPrim)
     case E_JENIE_DATA_ACK:
 		vUtils_Debug("E_JENIE_DATA_ACK");
         /* Update current state on success*/
-        if (sDemoData.sState.eAppState == E_STATE_REGISTER)
-        {
-			vUtils_Debug("Registered");
-            sDemoData.sState.eAppState = E_STATE_RUNNING;
-        }
     break;
 
     case E_JENIE_DATA_TO_SERVICE_ACK:
@@ -469,5 +469,56 @@ PUBLIC void vJenie_CbHwEvent(uint32 u32DeviceId,uint32 u32ItemBitmap)
 
 PRIVATE void interrupt_ProcessRxData(tsData *sData)
 {
+    if (sData->u16Length > 0)
+    {
+		switch (sData->pau8Data[0])
+        {
+			case BEACON_ASSIGNMENT:
+				vUtils_Debug("Beacon Assignment Message Received.");
+				data_ProcessBeaconAssignmentMessage(sData);
+				break;
 
+			default:
+				vUtils_Debug("!!! Message of unknown type received. !!!");
+				break;
+		}
+	}
+}
+
+PRIVATE void data_ProcessBeaconAssignmentMessage(tsData *sData)
+{
+	uint8 *originBeaconAddress = (uint8 *)&sDemoData.sState.u64DestAddr;
+
+	switch(sData->pau8Data[1])
+	{
+		case E_BEACON_0:
+			vUtils_Debug("Beacon Assignment: E_BEACON_0");
+			sDemoData.sState.eBeaconAssignment = E_BEACON_0;
+			vLedControl(LED1, TRUE);
+			sDemoData.sState.iFlashingLedIndex = LED2;
+			vLedControl(LED2, FALSE);
+			break;
+		case E_BEACON_1:
+			vUtils_Debug("Beacon Assignment: E_BEACON_1");
+			sDemoData.sState.eBeaconAssignment = E_BEACON_1;
+			vLedControl(LED2, TRUE);
+			sDemoData.sState.iFlashingLedIndex = LED2;
+			vLedControl(LED1, FALSE);
+			break;
+		default:
+			vUtils_Debug("Beacon Assignment: Unknown");
+			break;
+	}
+	int x;
+	for (x=0; x<8; x++)
+	{
+		originBeaconAddress[x]=sData->pau8Data[x+2];
+	}
+	vUtils_DisplayMsg("Origin Beacon Address: ",(uint32)sDemoData.sState.u64DestAddr);
+
+	if (sDemoData.sState.eAppState == E_STATE_REGISTER)
+	{
+		vUtils_Debug("Registered");
+		sDemoData.sState.eAppState = E_STATE_RUNNING;
+	}
 }
