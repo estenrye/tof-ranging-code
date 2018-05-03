@@ -106,27 +106,8 @@ typedef struct
         uint8   u8PrevRxBsn;
     } sTransceiver;
 
-    /* Controls (switch, light level alarm) */
-    struct
-    {
-        uint8   u8Switch;
-        uint8   u8LightAlarmLevel;
-    } sControls;
 
-    /* Sensor data, stored between read and going out in frame */
-    struct
-    {
-        uint8   u8TempResult;
-        uint8   u8HtsResult;
-        uint8   u8AlsResult;
-    } sSensors;
 
-    /* Settings specific to light sensor */
-    struct
-    {
-        uint16 u16Hi;
-        uint16 u16Lo;
-    } sLightSensor;
 
     /* System (state, assigned address, channel) */
     struct
@@ -150,7 +131,6 @@ PRIVATE bool_t bTimeOut;
 /****************************************************************************/
 /***        Local Function Prototypes                                     ***/
 /****************************************************************************/
-PRIVATE void vProcessTxData(void);
 
 /* Stack to application callback functions */
 /****************************************************************************
@@ -195,26 +175,6 @@ PUBLIC void vJenie_CbInit(bool_t bWarmStart)
             vAHI_WakeTimerEnable(E_AHI_WAKE_TIMER_1, TRUE);
         #endif
 
-        /* Set SW1(dio9) to input */
-        vAHI_DioSetDirection(E_AHI_DIO9_INT, 0);
-        /* set interrupt for DIO9 to occur on button release - rising edge */
-        vAHI_DioInterruptEdge(E_AHI_DIO9_INT, 0);
-        /* enable interrupt for DIO9 */
-        vAHI_DioInterruptEnable(E_AHI_DIO9_INT, 0);
-
-        /* Set SW2(dio10) to input */
-        vAHI_DioSetDirection(E_AHI_DIO10_INT, 0);
-        /* set interrupt for DIO9 to occur on button release - rising edge */
-        vAHI_DioInterruptEdge(E_AHI_DIO10_INT, 0);
-        /* enable interrupt for DIO9 */
-        vAHI_DioInterruptEnable(E_AHI_DIO10_INT, 0);
-
-        /* Set up peripheral hardware */
-        vALSreset();
-        vHTSreset();
-
-        /* Start ALS now: it automatically keeps re-sampling after this */
-        vALSstartReadChannel(0);
 
         sHomeData.eAppState = E_STATE_REGISTER;
         switch(eJenie_Start(E_JENIE_END_DEVICE))        /* Start network as end device */
@@ -247,12 +207,6 @@ PUBLIC void vJenie_CbInit(bool_t bWarmStart)
         }
     }else{
 
-        /* Set up peripheral hardware */
-        vALSreset();
-        vHTSreset();
-
-        /* Start ALS now: it automatically keeps re-sampling after this */
-        vALSstartReadChannel(0);
 
         switch(eJenie_Start(E_JENIE_END_DEVICE))        /* Start network as end device */
         {
@@ -338,7 +292,6 @@ PUBLIC void vJenie_CbMain(void)
             }
             if(loop_count % RUNNING_TRANSMIT_RATE == 0)
             {
-                vProcessTxData();
             }
             break;
 
@@ -490,24 +443,6 @@ PUBLIC void vJenie_CbStackDataEvent(teEventType eEventType, void *pvEventPrim)
     }
 }
 
-
-/****************************************************************************
- *
- * NAME: vProcessTxData
- *
- * DESCRIPTION:
- * Assembles and requests transmission of sensor data
- *
- * PARAMETERS:      Name            RW  Usage
- *
- * RETURNS:
- * void
- *
- ****************************************************************************/
-PRIVATE void vProcessTxData(void)
-{
-
-}
 
 /****************************************************************************
  *
