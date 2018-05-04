@@ -510,8 +510,10 @@ PRIVATE void vInitCoord(void)
     int i;
     for (i=0; i<MAX_BEACONS; i++)
     {
-
+        sDemoData.sBeaconState.asBeacons[i].eBeaconRole = E_BEACON_NOT_ASSIGNED;
+        sDemoData.sBeaconState.asBeacons[i].u64BeaconAddress = 0ULL;
     }
+    sDemoData.sBeaconState.u8ConnectedBeacons = 0;
     /* Get software version numbers */
     sDemoData.sSystem.u32AppApiVersion = u32Jenie_GetVersion(E_JENIE_COMPONENT_MAC);
     sDemoData.sSystem.u32JenieVersion = u32Jenie_GetVersion(E_JENIE_COMPONENT_JENIE);
@@ -928,6 +930,7 @@ PRIVATE void interrupt_RegisterBeacon(uint64 beaconAddress)
         }
         if (sDemoData.sBeaconState.asBeacons[i].u64BeaconAddress == beaconAddress)
         {
+            vUtils_DisplayMsg("Beacon Address already registered", (uint32)beaconAddress);
             eBeaconRole = sDemoData.sBeaconState.asBeacons[i].eBeaconRole;
             break;
         }
@@ -959,6 +962,7 @@ PRIVATE void interrupt_RegisterBeacon(uint64 beaconAddress)
                 break;
             }
         }
+        sDemoData.sBeaconState.u8ConnectedBeacons += 1;
     }
 
     dataTx_AssignBeaconRole(beaconAddress, eBeaconRole);

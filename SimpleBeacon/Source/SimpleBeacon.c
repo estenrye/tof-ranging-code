@@ -153,7 +153,7 @@ PUBLIC void vJenie_CbConfigureNetwork(void)
     /* Set PAN_ID and other network stuff or defaults will be used */
     gJenie_NetworkApplicationID =   0xdeaddead;
     gJenie_PanID                =   DEMO_PAN_ID;
-    gJenie_EndDevicePollPeriod  =   3;
+    gJenie_EndDevicePollPeriod  =   10;
     gJenie_EndDeviceScanSleep   =   100;
 
     gJenie_RoutingEnabled       = FALSE;
@@ -342,6 +342,7 @@ PUBLIC void vJenie_CbStackMgmtEvent(teEventType eEventType, void *pvEventPrim)
 		vUtils_DisplayMsg("New parent:",(uint32)sDemoData.sState.u64ParentAddr);
 		vUtils_Debug("Network Up");
         sDemoData.sState.bStackReady=TRUE;
+		sDemoData.sState.eAppState = E_STATE_RUNNING;
         bTimeOut=TRUE;
         break;
 
@@ -503,7 +504,7 @@ PRIVATE void dataRx_ProcessBeaconAssignmentMessage(tsData *sData)
 			vUtils_Debug("Beacon Assignment: E_BEACON_1");
 			sDemoData.sState.eBeaconAssignment = E_BEACON_1;
 			vLedControl(LED2, TRUE);
-			sDemoData.sState.iFlashingLedIndex = LED2;
+			sDemoData.sState.iFlashingLedIndex = LED1;
 			vLedControl(LED1, FALSE);
 			break;
 		default:
