@@ -8,7 +8,12 @@
 #define BLOCK_UPDATE                (BLOCK_MIN_RX + DEMO_ENDPOINTS)
 #define MAX_BLOCKS                  20
 
+#define CHANNEL_MIN                       11
+#define CHANNEL_MID                       18
+#define CHANNEL_MAX                       26
+#define DEMO_PAN_ID                       0x0e1c
 
+#define MAX_BEACONS                 2
 
 /* define LED positions  */
 #define LED1                        0
@@ -25,6 +30,9 @@
 /* define if using high power modules */
 /* #define HIGH_POWER */
 
+/* message types */
+#define BEACON_ASSIGNMENT                 0xb0
+
 /****************************************************************************/
 /***        Include files                                                 ***/
 /****************************************************************************/
@@ -33,9 +41,6 @@
 #include <AppHardwareApi.h>
 #include <string.h>
 #include "LcdDriver.h"
-#include "AlsDriver.h"
-#include "HtsDriver.h"
-#include "HomeSensorConfig.h"
 #include "JennicLogo.h"
 #include "Button.h"
 #include "LedControl.h"
@@ -45,6 +50,18 @@
 /****************************************************************************/
 /***        Type Definitions                                              ***/
 /****************************************************************************/
+typedef enum
+{
+	E_BEACON_0 = 0,
+	E_BEACON_1 = 1,
+    E_BEACON_NOT_ASSIGNED = 2
+} teBeaconAssignment;
+
+typedef struct
+{
+    uint64 u64BeaconAddress;
+    teBeaconAssignment eBeaconRole;
+} tsBeaconData;
 
 /* Used to track an association between extended address and short address */
 typedef struct
@@ -57,11 +74,7 @@ tsAssocNodes;
 /* System states with respect to screen display being shown */
 typedef enum
 {
-    E_STATE_NETWORK,
-    E_STATE_NODE,
-    E_STATE_NODE_CONTROL,
     E_STATE_SET_CHANNEL,
-    E_STATE_SETUP_SCREEN,
     E_STATE_SCANNING
 } teState;
 
@@ -81,6 +94,12 @@ typedef struct
 {
     struct
     {
+        tsBeaconData asBeacons[MAX_BEACONS];
+        uint8 u8ConnectedBeacons;
+    } sBeaconState;
+
+    struct
+    {
         teState eState;
         uint8   u8Channel;
         uint32  u32AppApiVersion;
@@ -89,7 +108,7 @@ typedef struct
     }
     sSystem;
 }
-tsDemoData;
+tsApplicationState;
 
 /* All application data with scope within the entire file is kept here, */
 typedef struct
@@ -115,7 +134,7 @@ typedef enum
 
 PRIVATE tsHomeData sHomeData;
 
-PRIVATE tsDemoData sDemoData;
+PRIVATE tsApplicationState sDemoData;
 
 
 PRIVATE bool_t bKeyDebounce = FALSE;
@@ -140,8 +159,8 @@ PRIVATE uint8 u8UpdateTimeBlock(uint8 u8TimeBlock);
 PRIVATE void button_ProcessSetChannelKeyPress(uint8 u8KeyMap);
 
 PRIVATE void vSetTimer(void);
-
-
+PRIVATE void dataTx_AssignBeaconRole(uint64 beaconAddress, teBeaconAssignment eBeaconRole);
+PRIVATE void interrupt_RegisterBeacon(uint64 beaconAddress);
 /* Stack to application callback functions */
 /****************************************************************************
  *
@@ -272,13 +291,6 @@ PUBLIC void vJenie_CbMain(void)
                 eJenie_SetPermitJoin(TRUE);
             }
 
-            if (sDemoData.sSystem.eState == E_STATE_SETUP_SCREEN)
-            {
-            }
-            else
-            {
-            }
-
             sHomeData.eAppState = E_STATE_RUNNING;
             break;
 
@@ -358,6 +370,7 @@ PUBLIC void vJenie_CbStackMgmtEvent(teEventType eEventType, void *pvEventPrim)
         case E_JENIE_CHILD_JOINED:
             vUtils_Debug("E_JENIE_CHILD_JOINED");
             vUtils_DisplayMsg("Child Joined: ",(uint32)(((tsChildJoined*)pvEventPrim)->u64SrcAddress));
+            interrupt_RegisterBeacon((((tsChildJoined*)pvEventPrim)->u64SrcAddress));
             break;
         case E_JENIE_CHILD_LEAVE:
             vUtils_Debug("E_JENIE_CHILD_LEAVE");
@@ -494,6 +507,11 @@ PRIVATE void vInitSystem(void)
  ****************************************************************************/
 PRIVATE void vInitCoord(void)
 {
+    int i;
+    for (i=0; i<MAX_BEACONS; i++)
+    {
+
+    }
     /* Get software version numbers */
     sDemoData.sSystem.u32AppApiVersion = u32Jenie_GetVersion(E_JENIE_COMPONENT_MAC);
     sDemoData.sSystem.u32JenieVersion = u32Jenie_GetVersion(E_JENIE_COMPONENT_JENIE);
@@ -803,7 +821,7 @@ PRIVATE void button_ProcessSetChannelKeyPress(uint8 u8KeyMap)
     {
     case E_KEY_0:
         /* Further setup button: go to setup screen */
-        sDemoData.sSystem.eState = E_STATE_SETUP_SCREEN;
+        sDemoData.sSystem.eState = E_STATE_RUNNING;
         vLcdWriteTextToClearLine("Initialising",7,0);
         vLcdRefreshArea(0,7,128,1);
         break;
@@ -820,7 +838,7 @@ PRIVATE void button_ProcessSetChannelKeyPress(uint8 u8KeyMap)
     case E_KEY_3:
         /* Done button: start beaconing and go to network screen */
         // vStartBeacon();
-        sDemoData.sSystem.eState = E_STATE_NETWORK;
+        sDemoData.sSystem.eState = E_STATE_RUNNING;
         vLcdWriteTextToClearLine("Initialising",7,0);
         vLcdRefreshArea(0,7,128,1);
         break;
@@ -849,7 +867,6 @@ PRIVATE uint8 u8UpdateTimeBlock(uint8 u8TimeBlock)
     /* Update block state for next time, if in a state where regular
        updates should be performed */
     if ((sDemoData.sSystem.eState != E_STATE_SET_CHANNEL)
-            && (sDemoData.sSystem.eState != E_STATE_SETUP_SCREEN)
             && (sDemoData.sSystem.eState != E_STATE_SCANNING))
     {
         u8TimeBlock++;
@@ -878,4 +895,79 @@ PRIVATE void vSetTimer(void)
 {
     /* Set timer for next block */
     vAHI_WakeTimerStart(E_AHI_WAKE_TIMER_0, sDemoData.sSystem.u32CalibratedTimeout);
+}
+
+/*****************************************************************************
+ * interrupt_RegisterBeacon
+ * 
+ *****************************************************************************/
+PRIVATE void interrupt_RegisterBeacon(uint64 beaconAddress)
+{
+    int i;
+    teBeaconAssignment eBeaconRole = E_BEACON_NOT_ASSIGNED;
+    bool_t beacon0Assigned = FALSE;
+    bool_t beacon1Assigned = FALSE;
+    for (i=0; i<sDemoData.sBeaconState.u8ConnectedBeacons; i++)
+    {
+        switch(sDemoData.sBeaconState.asBeacons[i].eBeaconRole)
+        {
+            case E_BEACON_0:
+                beacon0Assigned = TRUE;
+                vUtils_Debug("Beacon 0 Already Assigned");
+                break;
+            case E_BEACON_1:
+                beacon1Assigned = TRUE;
+                vUtils_Debug("Beacon 1 Already Assigned");
+                break;
+            case E_BEACON_NOT_ASSIGNED:
+                vUtils_Debug("Beacon Slot Not Assigneed");
+                break;
+            default:
+                vUtils_Debug("Unknown Beacon Role");
+                break;
+        }
+        if (sDemoData.sBeaconState.asBeacons[i].u64BeaconAddress == beaconAddress)
+        {
+            eBeaconRole = sDemoData.sBeaconState.asBeacons[i].eBeaconRole;
+            break;
+        }
+    }
+
+    if (eBeaconRole == E_BEACON_NOT_ASSIGNED)
+    {
+        if (!beacon0Assigned)
+        {
+            eBeaconRole = E_BEACON_0;
+            vUtils_Debug("Assigning Node Beacon Role: 0");
+        }
+        else if (!beacon1Assigned)
+        {
+            eBeaconRole = E_BEACON_1;
+            vUtils_Debug("Assigning Node Beacon Role: 1");
+        }
+        else
+        {
+            vUtils_Debug("All Nodes already allocated.");
+        }
+
+        for (i = 0; i<MAX_BEACONS; i++) 
+        {
+            if (sDemoData.sBeaconState.asBeacons[i].eBeaconRole == E_BEACON_NOT_ASSIGNED)
+            {
+                sDemoData.sBeaconState.asBeacons[i].u64BeaconAddress = beaconAddress;
+                sDemoData.sBeaconState.asBeacons[i].eBeaconRole = eBeaconRole;
+                break;
+            }
+        }
+    }
+
+    dataTx_AssignBeaconRole(beaconAddress, eBeaconRole);
+}
+
+PRIVATE void dataTx_AssignBeaconRole(uint64 beaconAddress, teBeaconAssignment eBeaconRole)
+{
+    uint8 au8Payload[8];
+    au8Payload[0] = BEACON_ASSIGNMENT;
+    au8Payload[1] = eBeaconRole;
+    eJenie_SendData(beaconAddress,au8Payload,2,0);
 }

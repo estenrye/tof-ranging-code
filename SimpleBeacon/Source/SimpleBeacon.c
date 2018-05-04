@@ -80,7 +80,8 @@
 typedef enum
 {
 	E_BEACON_0 = 0,
-	E_BEACON_1 = 1
+	E_BEACON_1 = 1,
+    E_BEACON_NOT_ASSIGNED = 2
 } teBeaconAssignment;
 
 /* Button values */
@@ -133,7 +134,7 @@ PRIVATE bool_t bTimeOut;
 /***        Local Function Prototypes                                     ***/
 /****************************************************************************/
 PRIVATE void interrupt_ProcessRxData(tsData *sData);
-PRIVATE void data_ProcessBeaconAssignmentMessage(tsData *sData);
+PRIVATE void dataRx_ProcessBeaconAssignmentMessage(tsData *sData);
 
 /* Stack to application callback functions */
 /****************************************************************************
@@ -475,7 +476,7 @@ PRIVATE void interrupt_ProcessRxData(tsData *sData)
         {
 			case BEACON_ASSIGNMENT:
 				vUtils_Debug("Beacon Assignment Message Received.");
-				data_ProcessBeaconAssignmentMessage(sData);
+				dataRx_ProcessBeaconAssignmentMessage(sData);
 				break;
 
 			default:
@@ -485,9 +486,9 @@ PRIVATE void interrupt_ProcessRxData(tsData *sData)
 	}
 }
 
-PRIVATE void data_ProcessBeaconAssignmentMessage(tsData *sData)
+PRIVATE void dataRx_ProcessBeaconAssignmentMessage(tsData *sData)
 {
-	uint8 *originBeaconAddress = (uint8 *)&sDemoData.sState.u64DestAddr;
+	// uint8 *originBeaconAddress = (uint8 *)&sDemoData.sState.u64DestAddr;
 
 	switch(sData->pau8Data[1])
 	{
@@ -510,11 +511,11 @@ PRIVATE void data_ProcessBeaconAssignmentMessage(tsData *sData)
 			break;
 	}
 	int x;
-	for (x=0; x<8; x++)
-	{
-		originBeaconAddress[x]=sData->pau8Data[x+2];
-	}
-	vUtils_DisplayMsg("Origin Beacon Address: ",(uint32)sDemoData.sState.u64DestAddr);
+	// for (x=0; x<8; x++)
+	// {
+	// 	originBeaconAddress[x]=sData->pau8Data[x+2];
+	// }
+	// vUtils_DisplayMsg("Origin Beacon Address: ",(uint32)sDemoData.sState.u64DestAddr);
 
 	if (sDemoData.sState.eAppState == E_STATE_REGISTER)
 	{
