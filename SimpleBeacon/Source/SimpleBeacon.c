@@ -1,4 +1,3 @@
-#define DEBUG TRUE
 /****************************************************************************
  *
  * MODULE:             JenNet Home Sensor Demo
@@ -47,9 +46,6 @@
 #include <jendefs.h>
 #include <AppHardwareApi.h>
 #include <string.h>
-#include "AlsDriver.h"
-#include "HtsDriver.h"
-#include "HomeSensorConfig.h"
 #include "Button.h"
 #include "LedControl.h"
 #include "Jenie.h"
@@ -70,10 +66,24 @@
 #define LED2                        1
 
 /* define if using high power modules */
-/* #define HIGH_POWER */
+//#define HIGH_POWER TRUE
+
+/* networking values */
+#define DEMO_PAN_ID                       0x0e1c
+#define COORDINATOR_ADDR				  0ULL
+
+/* message types */
+#define BEACON_ASSIGNMENT                 0xb0
 /****************************************************************************/
 /***        Type Definitions                                              ***/
 /****************************************************************************/
+typedef enum
+{
+	E_BEACON_0 = 0,
+	E_BEACON_1 = 1,
+    E_BEACON_NOT_ASSIGNED = 2
+} teBeaconAssignment;
+
 /* Button values */
 typedef enum
 {
@@ -81,54 +91,26 @@ typedef enum
     E_KEY_1 = BUTTON_1_MASK
 } teKeyValues;
 
-/* All application data with scope within the entire file is kept here, */
-typedef struct
-{
-    uint64 u64DestAddr;
-    uint64 u64ParentAddr;
-    uint64 u64LocalAddr;
-    bool_t bAppTimerStarted;
-    bool_t bStackReady;
-    uint8 eAppState;
-} tsHomeData;
-
 typedef enum
 {
     E_STATE_OFF,
     E_STATE_REGISTER,
     E_STATE_RUNNING
 }teAppState;
+
 /* All variables with scope throughout module are in one structure */
 typedef struct
 {
-    /* Transceiver (basically anything TX/RX not covered elsewhere) */
-    struct
-    {
-        uint8   u8CurrentTxHandle;
-        uint8   u8PrevRxBsn;
-    } sTransceiver;
-
-    /* Controls (switch, light level alarm) */
-    struct
-    {
-        uint8   u8Switch;
-        uint8   u8LightAlarmLevel;
-    } sControls;
-
-    /* Sensor data, stored between read and going out in frame */
-    struct
-    {
-        uint8   u8TempResult;
-        uint8   u8HtsResult;
-        uint8   u8AlsResult;
-    } sSensors;
-
-    /* Settings specific to light sensor */
-    struct
-    {
-        uint16 u16Hi;
-        uint16 u16Lo;
-    } sLightSensor;
+	struct
+	{
+		int iFlashingLedIndex;
+		teBeaconAssignment eBeaconAssignment;
+		uint64 u64DestAddr;
+		uint64 u64ParentAddr;
+		bool_t bAppTimerStarted;
+		bool_t bStackReady;
+		uint8 eAppState;
+	} sState;
 
     /* System (state, assigned address, channel) */
     struct
@@ -144,7 +126,6 @@ typedef struct
 /***        Local Variables                                               ***/
 /****************************************************************************/
 /* File scope data */
-PRIVATE tsHomeData sHomeData;
 PRIVATE tsDemoData sDemoData;
 
 PRIVATE bool_t bTimeOut;
@@ -152,11 +133,8 @@ PRIVATE bool_t bTimeOut;
 /****************************************************************************/
 /***        Local Function Prototypes                                     ***/
 /****************************************************************************/
-PRIVATE void vProcessTxData(void);
-PRIVATE void vTxRegister(void);
-PRIVATE void vInitEndpoint(void);
-PRIVATE void vProcessRead(void);
-PRIVATE uint8 u8FindMin(uint8 u8Val1, uint8 u8Val2);
+PRIVATE void interrupt_ProcessRxData(tsData *sData);
+PRIVATE void dataRx_ProcessBeaconAssignmentMessage(tsData *sData);
 
 /* Stack to application callback functions */
 /****************************************************************************
@@ -172,8 +150,6 @@ PRIVATE uint8 u8FindMin(uint8 u8Val1, uint8 u8Val2);
  ****************************************************************************/
 PUBLIC void vJenie_CbConfigureNetwork(void)
 {
-    vUtils_Init();
-	vUtils_Debug("vJenie_CbConfigureNetwork");
     /* Set PAN_ID and other network stuff or defaults will be used */
     gJenie_NetworkApplicationID =   0xdeaddead;
     gJenie_PanID                =   DEMO_PAN_ID;
@@ -186,22 +162,26 @@ PUBLIC void vJenie_CbConfigureNetwork(void)
 PUBLIC void vJenie_CbInit(bool_t bWarmStart)
 {
 
+    vUtils_Init();
 
     if(bWarmStart==FALSE)
     {
         (void)u32AHI_Init();
-        sHomeData.bStackReady=FALSE;
+        sDemoData.sState.bStackReady=FALSE;
         /* Initialise buttons, LEDs and program variables */
-        vInitEndpoint();
         /* Set DIO for buttons and LEDs */
+		sDemoData.sState.iFlashingLedIndex = LED1;
         vLedControl(LED1, FALSE);
         vLedControl(LED2, FALSE);
         vLedInitRfd();
         vButtonInitRfd();
 
-        vAHI_WakeTimerEnable(E_AHI_WAKE_TIMER_1, TRUE);
+        #ifdef NO_SLEEP
+            vAHI_WakeTimerEnable(E_AHI_WAKE_TIMER_1, TRUE);
+        #endif
 
-        sHomeData.eAppState = E_STATE_REGISTER;
+
+        sDemoData.sState.eAppState = E_STATE_REGISTER;
         switch(eJenie_Start(E_JENIE_END_DEVICE))        /* Start network as end device */
         {
         case E_JENIE_SUCCESS:
@@ -231,6 +211,7 @@ PUBLIC void vJenie_CbInit(bool_t bWarmStart)
 			break;
         }
     }else{
+
 
         switch(eJenie_Start(E_JENIE_END_DEVICE))        /* Start network as end device */
         {
@@ -290,16 +271,15 @@ PUBLIC void vJenie_CbMain(void)
        vAHI_WatchdogRestart();
     #endif
 
-    if(sHomeData.bStackReady && bTimeOut)       // Stack up and running and waiting for us to do something
+    if(sDemoData.sState.bStackReady && bTimeOut)       // Stack up and running and waiting for us to do something
     {
-        switch(sHomeData.eAppState)
+        switch(sDemoData.sState.eAppState)
         {
         case E_STATE_REGISTER:
 			vUtils_Debug("E_STATE_REGISTER");
             if(loop_count % REGISTER_FLASH_RATE == 0)
             {
-                vTxRegister();
-                vLedControl(LED1,phase);
+                vLedControl(sDemoData.sState.iFlashingLedIndex,phase);
                 phase ^= 1;
                 #ifdef NO_SLEEP
                     /* Manually poll parent as not sleeping */
@@ -310,26 +290,29 @@ PUBLIC void vJenie_CbMain(void)
 
         case E_STATE_RUNNING:
 			vUtils_Debug("E_STATE_RUNNING");
-            vProcessRead();
             if(loop_count % RUNNING_FLASH_RATE == 0)
             {
-                vLedControl(LED1,phase);
+                vLedControl(sDemoData.sState.iFlashingLedIndex,phase);
                 phase ^= 1;
             }
             if(loop_count % RUNNING_TRANSMIT_RATE == 0)
             {
-                vProcessTxData();
             }
             break;
 
         default:
-            vUtils_Debug("Unknown State");
+			vUtils_Debug("Unknown State");
             break;
         }
         loop_count--;
 
-        vAHI_WakeTimerStart(E_AHI_WAKE_TIMER_1, DELAY_PERIOD);
-        bTimeOut = FALSE;
+        #ifdef NO_SLEEP
+            vAHI_WakeTimerStart(E_AHI_WAKE_TIMER_1, DELAY_PERIOD);
+            bTimeOut = FALSE;
+        #else
+            eJenie_SetSleepPeriod(SLEEP_PERIOD * 10);
+            eJenie_Sleep(E_JENIE_SLEEP_OSCON_RAMON);
+        #endif
     }
 
 
@@ -355,12 +338,11 @@ PUBLIC void vJenie_CbStackMgmtEvent(teEventType eEventType, void *pvEventPrim)
     {
     case E_JENIE_NETWORK_UP:
 		vUtils_Debug("E_JENIE_NETWORK_UP");
-        sHomeData.u64ParentAddr = ((tsNwkStartUp*)pvEventPrim)->u64ParentAddress;
-        sHomeData.u64LocalAddr = ((tsNwkStartUp*)pvEventPrim)->u64LocalAddress;
-		vUtils_DisplayMsg("New parent:",(uint32)sHomeData.u64ParentAddr);
-        vUtils_DisplayMsg("Local Addr:", (uint32)sHomeData.u64LocalAddr);
+        sDemoData.sState.u64ParentAddr = ((tsNwkStartUp*)pvEventPrim)->u64ParentAddress;
+		vUtils_DisplayMsg("New parent:",(uint32)sDemoData.sState.u64ParentAddr);
 		vUtils_Debug("Network Up");
-        sHomeData.bStackReady=TRUE;
+        sDemoData.sState.bStackReady=TRUE;
+		sDemoData.sState.eAppState = E_STATE_RUNNING;
         bTimeOut=TRUE;
         break;
 
@@ -387,7 +369,6 @@ PUBLIC void vJenie_CbStackMgmtEvent(teEventType eEventType, void *pvEventPrim)
     case E_JENIE_CHILD_JOINED:
         vUtils_Debug("E_JENIE_CHILD_JOINED");
         vUtils_DisplayMsg("Child Joined: ",(uint32)(((tsChildJoined*)pvEventPrim)->u64SrcAddress));
-        tsChildJoined *joinEvent = ((tsChildJoined*) pvEventPrim);
         break;
 
     case E_JENIE_CHILD_LEAVE:
@@ -403,8 +384,8 @@ PUBLIC void vJenie_CbStackMgmtEvent(teEventType eEventType, void *pvEventPrim)
     case E_JENIE_STACK_RESET:
 		vUtils_Debug("E_JENIE_STACK_RESET");
 		vUtils_Debug("Stack Reset");
-        sHomeData.bStackReady = FALSE;
-        sHomeData.eAppState = E_STATE_REGISTER;
+        sDemoData.sState.bStackReady = FALSE;
+        sDemoData.sState.eAppState = E_STATE_REGISTER;
         break;
 
     default:
@@ -438,6 +419,7 @@ PUBLIC void vJenie_CbStackDataEvent(teEventType eEventType, void *pvEventPrim)
     {
     case E_JENIE_DATA:
 		vUtils_Debug("E_JENIE_DATA");
+		interrupt_ProcessRxData(pvEventPrim);
         break;
 
     case E_JENIE_DATA_TO_SERVICE:
@@ -447,11 +429,6 @@ PUBLIC void vJenie_CbStackDataEvent(teEventType eEventType, void *pvEventPrim)
     case E_JENIE_DATA_ACK:
 		vUtils_Debug("E_JENIE_DATA_ACK");
         /* Update current state on success*/
-        if (sHomeData.eAppState == E_STATE_REGISTER)
-        {
-			vUtils_Debug("Registered");
-            sHomeData.eAppState = E_STATE_RUNNING;
-        }
     break;
 
     case E_JENIE_DATA_TO_SERVICE_ACK:
@@ -460,50 +437,13 @@ PUBLIC void vJenie_CbStackDataEvent(teEventType eEventType, void *pvEventPrim)
 
     default:
         /*Unknown data event type */
-		vUtils_Debug("Unknown Data Event");
+        #ifdef DEBUG
+            vUtils_Debug("Unknown Data Event");
+        #endif
         break;
     }
 }
 
-
-/****************************************************************************
- *
- * NAME: vProcessTxData
- *
- * DESCRIPTION:
- * Assembles and requests transmission of sensor data
- *
- * PARAMETERS:      Name            RW  Usage
- *
- * RETURNS:
- * void
- *
- ****************************************************************************/
-PRIVATE void vProcessTxData(void)
-{
-    vUtils_Debug("vProcessTxData");
-}
-
-/****************************************************************************
- *
- * NAME: vTxRegister
- *
- * DESCRIPTION:
- * Requests transmission of registration message
- *
- * PARAMETERS:      Name            RW  Usage
- *
- * RETURNS:
- * void
- *
- ****************************************************************************/
-PRIVATE void vTxRegister(void)
-{
-    vUtils_Debug("vTxRegister");
-    uint8 au8Payload[1];
-    au8Payload[0] = DEMO_ENDPOINT_JOIN_ID;
-    eJenie_SendData(0ULL,au8Payload,1,TXOPTION_ACKREQ);
-}
 
 /****************************************************************************
  *
@@ -522,54 +462,65 @@ PRIVATE void vTxRegister(void)
  ****************************************************************************/
 PUBLIC void vJenie_CbHwEvent(uint32 u32DeviceId,uint32 u32ItemBitmap)
 {
-    if ( (u32DeviceId == E_AHI_DEVICE_SYSCTRL)
+	if ( (u32DeviceId == E_AHI_DEVICE_SYSCTRL)
                 && (u32ItemBitmap & E_AHI_SYSCTRL_WK1_MASK) )
     {
-        vUtils_Debug("vJenie_CbHwEvent");        
         bTimeOut = TRUE;
     }
 }
 
-/****************************************************************************
- *
- * NAME: vInitEndpoint
- *
- * DESCRIPTION:
- * Initialises the nodes state
- *
- * PARAMETERS:      Name            RW  Usage
- *
- * RETURNS:
- * void
- *
- ****************************************************************************/
-PRIVATE void vInitEndpoint(void)
+PRIVATE void interrupt_ProcessRxData(tsData *sData)
 {
-    vUtils_Debug("vInitEndpoint");
-    sDemoData.sSystem.eState = E_STATE_OFF;
-    sDemoData.sSystem.u16ShortAddr = 0xffff;
-    sDemoData.sSystem.u8ThisNode = 0;
+    if (sData->u16Length > 0)
+    {
+		switch (sData->pau8Data[0])
+        {
+			case BEACON_ASSIGNMENT:
+				vUtils_Debug("Beacon Assignment Message Received.");
+				dataRx_ProcessBeaconAssignmentMessage(sData);
+				break;
+
+			default:
+				vUtils_Debug("!!! Message of unknown type received. !!!");
+				break;
+		}
+	}
 }
 
-/****************************************************************************
- *
- * NAME: vProcessRead
- *
- * DESCRIPTION:
- * Gets the current readings from each sensor. If the light level causes the
- * low light alarm to be triggered, an LED is illuminated.
- *
- * RETURNS:
- * void
- *
- * NOTES:
- * This is not an efficient way to read the sensors as much time is wasted
- * waiting for the humidity and temperature sensor to complete. The sensor
- * pulls a DIO line low when it is ready, and this could be used to generate
- * an interrupt to indicate when data is ready to be read.
- *
- ****************************************************************************/
-PRIVATE void vProcessRead(void)
+PRIVATE void dataRx_ProcessBeaconAssignmentMessage(tsData *sData)
 {
-    vUtils_Debug("vProcessRead");
+	// uint8 *originBeaconAddress = (uint8 *)&sDemoData.sState.u64DestAddr;
+
+	switch(sData->pau8Data[1])
+	{
+		case E_BEACON_0:
+			vUtils_Debug("Beacon Assignment: E_BEACON_0");
+			sDemoData.sState.eBeaconAssignment = E_BEACON_0;
+			vLedControl(LED1, TRUE);
+			sDemoData.sState.iFlashingLedIndex = LED2;
+			vLedControl(LED2, FALSE);
+			break;
+		case E_BEACON_1:
+			vUtils_Debug("Beacon Assignment: E_BEACON_1");
+			sDemoData.sState.eBeaconAssignment = E_BEACON_1;
+			vLedControl(LED2, TRUE);
+			sDemoData.sState.iFlashingLedIndex = LED1;
+			vLedControl(LED1, FALSE);
+			break;
+		default:
+			vUtils_Debug("Beacon Assignment: Unknown");
+			break;
+	}
+	int x;
+	// for (x=0; x<8; x++)
+	// {
+	// 	originBeaconAddress[x]=sData->pau8Data[x+2];
+	// }
+	// vUtils_DisplayMsg("Origin Beacon Address: ",(uint32)sDemoData.sState.u64DestAddr);
+
+	if (sDemoData.sState.eAppState == E_STATE_REGISTER)
+	{
+		vUtils_Debug("Registered");
+		sDemoData.sState.eAppState = E_STATE_RUNNING;
+	}
 }
