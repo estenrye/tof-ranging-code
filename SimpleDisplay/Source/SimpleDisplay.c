@@ -2,10 +2,12 @@
 /****************************************************************************/
 /***        Macro Definitions                                             ***/
 /****************************************************************************/
+#define MAX_BEACONS                 2
+
 /* Block (time slice) values */
 #define BLOCK_TIME_IN_32K_PERIODS   1600
 #define BLOCK_MIN_RX                2
-#define BLOCK_UPDATE                (BLOCK_MIN_RX + DEMO_ENDPOINTS)
+#define BLOCK_UPDATE                (BLOCK_MIN_RX + MAX_BEACONS)
 #define MAX_BLOCKS                  20
 
 #define CHANNEL_MIN                       11
@@ -13,7 +15,6 @@
 #define CHANNEL_MAX                       26
 #define DEMO_PAN_ID                       0x0e1c
 
-#define MAX_BEACONS                 2
 
 /* define LED positions  */
 #define LED1                        0
@@ -75,7 +76,8 @@ tsAssocNodes;
 typedef enum
 {
     E_STATE_SET_CHANNEL,
-    E_STATE_SCANNING
+    E_STATE_SCANNING,
+    E_STATE_STATUS_SCREEN
 } teState;
 
 /* Button values */
@@ -150,8 +152,10 @@ PRIVATE void vInitCoord(void);
 PRIVATE void vInitSystem(void);
 PRIVATE void vProcessCurrentTimeBlock(uint8 u8TimeBlock);
 
-PRIVATE void vBuildSetChannelScreen(void);
-PRIVATE void vUpdateSetChannelScreen(void);
+PRIVATE void lcd_BuildSetChannelScreen(void);
+PRIVATE void lcd_UpdateSetChannelScreen(void);
+PRIVATE void lcd_BuildStatusScreen(void);
+PRIVATE void lcd_UpdateStatusScreen(void);
 PRIVATE void vStringCopy(char *pcFrom,char *pcTo);
 PRIVATE void vValToDec(char *pcOutString, uint8 u8Value, char *pcLabel);
 PRIVATE void button_adjustChannel(uint8 *pu8Value, uint8 u8MaxValue, uint8 u8OffValue, bool_t bUpNotDown);
@@ -186,7 +190,7 @@ PUBLIC void vJenie_CbConfigureNetwork(void)
     vUtils_Debug("vJenie_CbConfigureNetwork");
     sDemoData.sSystem.u8Channel = CHANNEL_MID;
 
-    vBuildSetChannelScreen();
+    lcd_BuildSetChannelScreen();
     /* Change to channel setting state */
     sDemoData.sSystem.eState = E_STATE_SET_CHANNEL;
 
@@ -285,17 +289,17 @@ PUBLIC void vJenie_CbMain(void)
         switch (sHomeData.eAppState)
         {
         case E_STATE_STARTUP:
-            vUtils_Debug("E_STATE_STARTUP");
+            // vUtils_Debug("E_STATE_STARTUP");
             if (!(bJenie_GetPermitJoin() ))
             {
                 eJenie_SetPermitJoin(TRUE);
             }
-
+            vLedControl(0, FALSE);
             sHomeData.eAppState = E_STATE_RUNNING;
             break;
 
         case E_STATE_RUNNING:
-
+            // vUtils_Debug("E_STATE_RUNNING");
             vSetTimer();
             /* Perform scheduler action */
             vProcessCurrentTimeBlock(u8TimeBlock);
@@ -308,6 +312,7 @@ PUBLIC void vJenie_CbMain(void)
             break;
 
         case E_STATE_WAITING:
+            // vUtils_Debug("E_STATE_WAITING");        
             if (bTimer0Fired)
             {
                 bTimer0Fired = FALSE;
@@ -546,7 +551,10 @@ PRIVATE void vProcessCurrentTimeBlock(uint8 u8TimeBlock)
     /* Process current block scheduled activity */
     switch (u8TimeBlock)
     {
-
+        // vUtils_Debug("vProcessCurrentTimeBlock");
+        case BLOCK_UPDATE:
+            lcd_UpdateStatusScreen();
+            break;
     }
 }
 
@@ -616,7 +624,7 @@ PRIVATE bool_t bProcessKeys(uint8 *pu8Keys)
 
 /****************************************************************************
  *
- * NAME: vBuildSetChannelScreen
+ * NAME: lcd_BuildSetChannelScreen
  *
  * DESCRIPTION:
  * Creates the Set Channel screen, consisting of a bitmap of the Jennic logo
@@ -627,7 +635,7 @@ PRIVATE bool_t bProcessKeys(uint8 *pu8Keys)
  * void
  *
  ****************************************************************************/
-PRIVATE void vBuildSetChannelScreen(void)
+PRIVATE void lcd_BuildSetChannelScreen(void)
 {
     vLcdClear();
 
@@ -639,12 +647,12 @@ PRIVATE void vBuildSetChannelScreen(void)
     vLcdWriteText("Done", 7, 103);
 
     /* Update to display the data */
-    vUpdateSetChannelScreen();
+    lcd_UpdateSetChannelScreen();
 }
 
 /****************************************************************************
  *
- * NAME: vUpdateSetChannelScreen
+ * NAME: lcd_UpdateSetChannelScreen
  *
  * DESCRIPTION:
  * Updates the Set Channel screen, when it first appears or when the user
@@ -654,7 +662,7 @@ PRIVATE void vBuildSetChannelScreen(void)
  * void
  *
  ****************************************************************************/
-PRIVATE void vUpdateSetChannelScreen(void)
+PRIVATE void lcd_UpdateSetChannelScreen(void)
 {
     char acString[5];
 
@@ -664,6 +672,57 @@ PRIVATE void vUpdateSetChannelScreen(void)
     vLcdRefreshAll();
 }
 
+PRIVATE void lcd_BuildStatusScreen(void)
+{
+    vUtils_Debug("lcd_BuildStatusScreen");
+    vLcdClear();
+    vLcdWriteText("Esten Rye", 0, 0);
+    vLcdWriteTextRightJustified("SEIS 740", 0, 127);
+    vLcdWriteText("TOF Triangulation", 1, 0);
+    vLcdWriteText("Node 0:", 3, 0);
+    vLcdWriteTextRightJustified("Off", 3, 60);
+    vLcdWriteText("Node 1:", 3, 64);
+    vLcdWriteTextRightJustified("Off", 3, 123);
+
+    lcd_UpdateStatusScreen();
+}
+
+PRIVATE void lcd_UpdateStatusScreen(void)
+{
+    vUtils_Debug("lcd_UpdateStatusScreen");
+    int i;
+    bool_t beacon0Assigned = FALSE;
+    bool_t beacon1Assigned = FALSE;
+    vUtils_DisplayMsg("u8ConnectedBeacons", sDemoData.sBeaconState.u8ConnectedBeacons);
+    for (i=0; i<sDemoData.sBeaconState.u8ConnectedBeacons; i++)
+    {
+        switch(sDemoData.sBeaconState.asBeacons[i].eBeaconRole)
+        {
+            case E_BEACON_0:
+                beacon0Assigned = TRUE;
+                break;
+            case E_BEACON_1:
+                beacon1Assigned = TRUE;
+                break;
+            default:
+                break;
+        }
+    }
+
+    if (beacon0Assigned)
+    {
+        vLcdWriteTextRightJustified(" On", 3, 60);
+        vUtils_Debug("Beacon1");
+    }
+    if (beacon1Assigned)
+    {
+        vLcdWriteTextRightJustified(" On", 3, 123);
+        vUtils_Debug("Beacon1");
+        
+    }
+
+    vLcdRefreshAll();
+}
 
 
 /****************************************************************************
@@ -823,9 +882,9 @@ PRIVATE void button_ProcessSetChannelKeyPress(uint8 u8KeyMap)
     {
     case E_KEY_0:
         /* Further setup button: go to setup screen */
-        sDemoData.sSystem.eState = E_STATE_RUNNING;
-        vLcdWriteTextToClearLine("Initialising",7,0);
-        vLcdRefreshArea(0,7,128,1);
+        sDemoData.sSystem.eState = E_STATE_STATUS_SCREEN;
+        sHomeData.eAppState = E_STATE_STARTUP;
+        lcd_BuildStatusScreen();
         break;
 
     case E_KEY_1:
@@ -834,15 +893,15 @@ PRIVATE void button_ProcessSetChannelKeyPress(uint8 u8KeyMap)
         /* Minus button: decrement value */
 
         button_adjustChannel(&sDemoData.sSystem.u8Channel, CHANNEL_MAX, CHANNEL_MIN, u8KeyMap == E_KEY_1);
-        vUpdateSetChannelScreen();
+        lcd_UpdateSetChannelScreen();
         break;
 
     case E_KEY_3:
         /* Done button: start beaconing and go to network screen */
         // vStartBeacon();
-        sDemoData.sSystem.eState = E_STATE_RUNNING;
-        vLcdWriteTextToClearLine("Initialising",7,0);
-        vLcdRefreshArea(0,7,128,1);
+        sDemoData.sSystem.eState = E_STATE_STATUS_SCREEN;
+        sHomeData.eAppState = E_STATE_STARTUP;
+        lcd_BuildStatusScreen();
         break;
 
     default:
@@ -871,6 +930,7 @@ PRIVATE uint8 u8UpdateTimeBlock(uint8 u8TimeBlock)
     if ((sDemoData.sSystem.eState != E_STATE_SET_CHANNEL)
             && (sDemoData.sSystem.eState != E_STATE_SCANNING))
     {
+        // vUtils_Debug("vProcessCurrentTimeBlock");        
         u8TimeBlock++;
         if (u8TimeBlock >= MAX_BLOCKS)
         {
@@ -942,11 +1002,13 @@ PRIVATE void interrupt_RegisterBeacon(uint64 beaconAddress)
         {
             eBeaconRole = E_BEACON_0;
             vUtils_Debug("Assigning Node Beacon Role: 0");
+            vLedControl(1, FALSE);
         }
         else if (!beacon1Assigned)
         {
             eBeaconRole = E_BEACON_1;
             vUtils_Debug("Assigning Node Beacon Role: 1");
+            vLedControl(2, FALSE);
         }
         else
         {
