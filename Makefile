@@ -32,7 +32,7 @@
 #
 #############################################################################
 
-DIRS	= AN1065_JN_HomeSensorRtr AN1065_JN_HomeSensorEndD AN1065_JN_HomeSensorCoord SimpleDisplay SimpleBeacon
+DIRS	= SimpleDisplay SimpleBeacon
 
 TARGETS: clean all
 
