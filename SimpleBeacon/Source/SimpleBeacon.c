@@ -176,6 +176,11 @@ PUBLIC void vJenie_CbInit(bool_t bWarmStart)
         vLedInitRfd();
         vButtonInitRfd();
 
+        sDemoData.sState.eBeaconAssignment = E_BEACON_NOT_ASSIGNED;
+
+        /* Enable TOF ranging. */
+        // vAppApiTofInit(TRUE);
+    
         #ifdef NO_SLEEP
             vAHI_WakeTimerEnable(E_AHI_WAKE_TIMER_1, TRUE);
         #endif
@@ -511,12 +516,6 @@ PRIVATE void dataRx_ProcessBeaconAssignmentMessage(tsData *sData)
 			vUtils_Debug("Beacon Assignment: Unknown");
 			break;
 	}
-	int x;
-	// for (x=0; x<8; x++)
-	// {
-	// 	originBeaconAddress[x]=sData->pau8Data[x+2];
-	// }
-	// vUtils_DisplayMsg("Origin Beacon Address: ",(uint32)sDemoData.sState.u64DestAddr);
 
 	if (sDemoData.sState.eAppState == E_STATE_REGISTER)
 	{

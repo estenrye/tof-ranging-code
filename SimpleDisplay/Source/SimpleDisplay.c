@@ -6,8 +6,8 @@
 
 /* Block (time slice) values */
 #define BLOCK_TIME_IN_32K_PERIODS   1600
-#define BLOCK_MIN_RX                2
-#define BLOCK_UPDATE                (BLOCK_MIN_RX + MAX_BEACONS)
+#define BLOCK_GET_TOF               2
+#define BLOCK_UPDATE                (BLOCK_GET_TOF + MAX_BEACONS)
 #define MAX_BLOCKS                  20
 
 #define CHANNEL_MIN                       11
@@ -102,6 +102,13 @@ typedef struct
 
     struct
     {
+        double dDistanceA;
+        double dDistanceB;
+        double dDistanceC;
+    } sState;
+
+    struct
+    {
         teState eState;
         uint8   u8Channel;
         uint32  u32AppApiVersion;
@@ -165,6 +172,8 @@ PRIVATE void button_ProcessSetChannelKeyPress(uint8 u8KeyMap);
 PRIVATE void vSetTimer(void);
 PRIVATE void dataTx_AssignBeaconRole(uint64 beaconAddress, teBeaconAssignment eBeaconRole);
 PRIVATE void interrupt_RegisterBeacon(uint64 beaconAddress);
+PRIVATE void task_GetTofReadings(void);
+
 /* Stack to application callback functions */
 /****************************************************************************
  *
@@ -519,6 +528,10 @@ PRIVATE void vInitCoord(void)
         sDemoData.sBeaconState.asBeacons[i].u64BeaconAddress = 0ULL;
     }
     sDemoData.sBeaconState.u8ConnectedBeacons = 0;
+
+    /* Enable TOF ranging. */
+    // vAppApiTofInit(TRUE);
+
     /* Get software version numbers */
     sDemoData.sSystem.u32AppApiVersion = u32Jenie_GetVersion(E_JENIE_COMPONENT_MAC);
     sDemoData.sSystem.u32JenieVersion = u32Jenie_GetVersion(E_JENIE_COMPONENT_JENIE);
@@ -1036,4 +1049,17 @@ PRIVATE void dataTx_AssignBeaconRole(uint64 beaconAddress, teBeaconAssignment eB
     au8Payload[0] = BEACON_ASSIGNMENT;
     au8Payload[1] = eBeaconRole;
     eJenie_SendData(beaconAddress,au8Payload,2,0);
+}
+
+PRIVATE void task_GetTofReadings(void)
+{
+    if (sDemoData.sBeaconState.u8ConnectedBeacons >= 1)
+    {
+        sDemoData.sState.dDistanceA = 0.9144; //meters (3 ft)
+    }
+    if (sDemoData.sBeaconState.u8ConnectedBeacons >= 2)
+    {
+        sDemoData.sState.dDistanceB = 1.524; //meters (5 ft)
+    }
+    sDemoData.sState.dDistanceC = 1.2; //meters (4 ft)
 }
