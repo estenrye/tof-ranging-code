@@ -721,13 +721,12 @@ PRIVATE void lcd_BuildStatusScreen(void)
     vLcdWriteTextRightJustified("Off", 2, 60);
     vLcdWriteText("Node 1:", 2, 64);
     vLcdWriteTextRightJustified("Off", 2, 123);
-    // vLcdWriteText("A:", 3, 0);
-    // vLcdWriteText("B:", 4, 0);
-    // vLcdWriteText("C:", 5, 0);
-    // vLcdWriteText("X:", 6, 0);
-    // vLcdWriteText("Y:", 7, 0);
+    vLcdWriteText("A:", 3, 0);
+    vLcdWriteText("B:", 4, 0);
+    vLcdWriteText("C:", 5, 0);
+    vLcdWriteText("X:", 6, 0);
+    vLcdWriteText("Y:", 7, 0);
     lcd_UpdateStatusScreen();
-    // vSetTimer();
 }
 
 PRIVATE void lcd_UpdateStatusScreen(void)
@@ -764,17 +763,17 @@ PRIVATE void lcd_UpdateStatusScreen(void)
         
     }
 
-    // char output[20];
-    // dtoa(sDemoData.sState.dDistanceA, output, 4);
-    // vLcdWriteTextRightJustified(output, 3, 127);
-    // dtoa(sDemoData.sState.dDistanceB, output, 4);
-    // vLcdWriteTextRightJustified(output, 4, 127);
-    // dtoa(sDemoData.sState.dDistanceC, output, 4);
-    // vLcdWriteTextRightJustified(output, 5, 127);
-    // dtoa(sDemoData.sState.dXpos, output, 4);
-    // vLcdWriteTextRightJustified(output, 6, 127);
-    // dtoa(sDemoData.sState.dYpos, output, 4);
-    // vLcdWriteTextRightJustified(output, 7, 127);
+    char output[20];
+    dtoa(sDemoData.sState.dDistanceA, output, 4);
+    vLcdWriteTextRightJustified(output, 3, 127);
+    dtoa(sDemoData.sState.dDistanceB, output, 4);
+    vLcdWriteTextRightJustified(output, 4, 127);
+    dtoa(sDemoData.sState.dDistanceC, output, 4);
+    vLcdWriteTextRightJustified(output, 5, 127);
+    dtoa(sDemoData.sState.dXpos, output, 4);
+    vLcdWriteTextRightJustified(output, 6, 127);
+    dtoa(sDemoData.sState.dYpos, output, 4);
+    vLcdWriteTextRightJustified(output, 7, 127);
     vLcdRefreshAll();
 }
 
