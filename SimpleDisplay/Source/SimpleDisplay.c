@@ -6,6 +6,7 @@
 
 /* Block (time slice) values */
 #define BLOCK_TIME_IN_32K_PERIODS   1600
+#define BLOCK_REGISTER_BEACONS      0
 #define BLOCK_GET_TOF               2
 #define BLOCK_CALCULATE_POSITION    10
 #define BLOCK_UPDATE                (BLOCK_CALCULATE_POSITION + 1)
@@ -43,7 +44,6 @@
 #include <AppHardwareApi.h>
 #include <string.h>
 #include <math.h>
-#include <stdio.h>
 #include "LcdDriver.h"
 #include "JennicLogo.h"
 #include "Button.h"
@@ -139,7 +139,8 @@ typedef enum
 {
     E_STATE_STARTUP,
     E_STATE_RUNNING,
-    E_STATE_WAITING
+    E_STATE_WAITING,
+    E_STATE_JOINING_BEACON
 }teAppState;
 
 /****************************************************************************/
@@ -175,11 +176,13 @@ PRIVATE uint8 u8UpdateTimeBlock(uint8 u8TimeBlock);
 PRIVATE void button_ProcessSetChannelKeyPress(uint8 u8KeyMap);
 
 PRIVATE void vSetTimer(void);
-PRIVATE void dataTx_AssignBeaconRole(uint64 beaconAddress, teBeaconAssignment eBeaconRole);
+PRIVATE void dataTx_AssignBeaconRole(void);
 PRIVATE void interrupt_RegisterBeacon(uint64 beaconAddress);
 PRIVATE void task_GetTofReadings(void);
 PRIVATE void task_CalculateXYPos(void);
-
+PRIVATE void reverse(char *str, int len);
+PRIVATE int intToStr(int x, char str[], int d);
+PRIVATE void dtoa(double n, char *res, int afterpoint);
 /* Stack to application callback functions */
 /****************************************************************************
  *
@@ -304,7 +307,7 @@ PUBLIC void vJenie_CbMain(void)
         switch (sHomeData.eAppState)
         {
         case E_STATE_STARTUP:
-            // vUtils_Debug("E_STATE_STARTUP");
+            vUtils_Debug("E_STATE_STARTUP");
             if (!(bJenie_GetPermitJoin() ))
             {
                 eJenie_SetPermitJoin(TRUE);
@@ -314,7 +317,7 @@ PUBLIC void vJenie_CbMain(void)
             break;
 
         case E_STATE_RUNNING:
-            // vUtils_Debug("E_STATE_RUNNING");
+            vUtils_Debug("E_STATE_RUNNING");
             vSetTimer();
             /* Perform scheduler action */
             vProcessCurrentTimeBlock(u8TimeBlock);
@@ -327,14 +330,16 @@ PUBLIC void vJenie_CbMain(void)
             break;
 
         case E_STATE_WAITING:
-            // vUtils_Debug("E_STATE_WAITING");        
+            vUtils_Debug("E_STATE_WAITING");        
             if (bTimer0Fired)
             {
                 bTimer0Fired = FALSE;
                 sHomeData.eAppState = E_STATE_RUNNING;
             }
             break;
-
+        case E_STATE_JOINING_BEACON:
+            vUtils_Debug("E_STATE_JOINING_BEACON");
+            break;
         default:
             vUtils_Debug("default");
             break;
@@ -388,9 +393,12 @@ PUBLIC void vJenie_CbStackMgmtEvent(teEventType eEventType, void *pvEventPrim)
             break;
 
         case E_JENIE_CHILD_JOINED:
+            sHomeData.eAppState = E_STATE_JOINING_BEACON;
             vUtils_Debug("E_JENIE_CHILD_JOINED");
             vUtils_DisplayMsg("Child Joined: ",(uint32)(((tsChildJoined*)pvEventPrim)->u64SrcAddress));
             interrupt_RegisterBeacon((((tsChildJoined*)pvEventPrim)->u64SrcAddress));
+            vSetTimer();
+            sHomeData.eAppState = E_STATE_WAITING;
             break;
         case E_JENIE_CHILD_LEAVE:
             vUtils_Debug("E_JENIE_CHILD_LEAVE");
@@ -470,6 +478,7 @@ PUBLIC void vJenie_CbHwEvent(uint32 u32DeviceId,uint32 u32ItemBitmap)
     if ((u32DeviceId == E_AHI_DEVICE_SYSCTRL)
                 && (u32ItemBitmap & (1 << E_AHI_SYSCTRL_WK0)))      /* added for timer 0 interrupt */
     {
+        vUtils_Debug("Timer Fired.");
         bTimer0Fired = TRUE;
 
     } else if ((u32DeviceId == E_AHI_DEVICE_SYSCTRL)
@@ -574,8 +583,12 @@ PRIVATE void vProcessCurrentTimeBlock(uint8 u8TimeBlock)
         case BLOCK_GET_TOF:
             task_GetTofReadings();
             break;
+        case BLOCK_REGISTER_BEACONS:
+            dataTx_AssignBeaconRole();
+            break;
         case BLOCK_UPDATE:
             lcd_UpdateStatusScreen();
+            vSetTimer();
             break;
         case BLOCK_CALCULATE_POSITION:
             task_CalculateXYPos();
@@ -708,12 +721,13 @@ PRIVATE void lcd_BuildStatusScreen(void)
     vLcdWriteTextRightJustified("Off", 2, 60);
     vLcdWriteText("Node 1:", 2, 64);
     vLcdWriteTextRightJustified("Off", 2, 123);
-    vLcdWriteText("A:", 3, 0);
-    vLcdWriteText("B:", 4, 0);
-    vLcdWriteText("C:", 5, 0);
-    vLcdWriteText("X:", 6, 0);
-    vLcdWriteText("Y:", 7, 0);
+    // vLcdWriteText("A:", 3, 0);
+    // vLcdWriteText("B:", 4, 0);
+    // vLcdWriteText("C:", 5, 0);
+    // vLcdWriteText("X:", 6, 0);
+    // vLcdWriteText("Y:", 7, 0);
     lcd_UpdateStatusScreen();
+    // vSetTimer();
 }
 
 PRIVATE void lcd_UpdateStatusScreen(void)
@@ -750,6 +764,17 @@ PRIVATE void lcd_UpdateStatusScreen(void)
         
     }
 
+    // char output[20];
+    // dtoa(sDemoData.sState.dDistanceA, output, 4);
+    // vLcdWriteTextRightJustified(output, 3, 127);
+    // dtoa(sDemoData.sState.dDistanceB, output, 4);
+    // vLcdWriteTextRightJustified(output, 4, 127);
+    // dtoa(sDemoData.sState.dDistanceC, output, 4);
+    // vLcdWriteTextRightJustified(output, 5, 127);
+    // dtoa(sDemoData.sState.dXpos, output, 4);
+    // vLcdWriteTextRightJustified(output, 6, 127);
+    // dtoa(sDemoData.sState.dYpos, output, 4);
+    // vLcdWriteTextRightJustified(output, 7, 127);
     vLcdRefreshAll();
 }
 
@@ -959,13 +984,13 @@ PRIVATE uint8 u8UpdateTimeBlock(uint8 u8TimeBlock)
     if ((sDemoData.sSystem.eState != E_STATE_SET_CHANNEL)
             && (sDemoData.sSystem.eState != E_STATE_SCANNING))
     {
-        // vUtils_Debug("vProcessCurrentTimeBlock");        
         u8TimeBlock++;
         if (u8TimeBlock >= MAX_BLOCKS)
         {
             u8TimeBlock = 0;
         }
     }
+    vUtils_DisplayMsg("vProcessCurrentTimeBlock", u8TimeBlock);        
 
     return u8TimeBlock;
 }
@@ -984,6 +1009,7 @@ PRIVATE uint8 u8UpdateTimeBlock(uint8 u8TimeBlock)
  ****************************************************************************/
 PRIVATE void vSetTimer(void)
 {
+    vUtils_Debug("Timer Set");
     /* Set timer for next block */
     vAHI_WakeTimerStart(E_AHI_WAKE_TIMER_0, sDemoData.sSystem.u32CalibratedTimeout);
 }
@@ -1055,26 +1081,36 @@ PRIVATE void interrupt_RegisterBeacon(uint64 beaconAddress)
         }
         sDemoData.sBeaconState.u8ConnectedBeacons += 1;
     }
-
-    dataTx_AssignBeaconRole(beaconAddress, eBeaconRole);
 }
 
-PRIVATE void dataTx_AssignBeaconRole(uint64 beaconAddress, teBeaconAssignment eBeaconRole)
+PRIVATE void dataTx_AssignBeaconRole(void)
 {
-    uint8 au8Payload[8];
-    au8Payload[0] = BEACON_ASSIGNMENT;
-    au8Payload[1] = eBeaconRole;
-    eJenie_SendData(beaconAddress,au8Payload,2,0);
+    vUtils_Debug("dataTx_AssignBeaconRole");
+    int i;
+    for (i=0; i<sDemoData.sBeaconState.u8ConnectedBeacons; i++)
+    {
+        vUtils_Debug("Transmit Beacon");
+        if (sDemoData.sBeaconState.asBeacons[i].eBeaconRole != E_BEACON_NOT_ASSIGNED)
+        {
+            uint8 au8Payload[8];
+            au8Payload[0] = BEACON_ASSIGNMENT;
+            au8Payload[1] = sDemoData.sBeaconState.asBeacons[i].eBeaconRole;
+            eJenie_SendData(sDemoData.sBeaconState.asBeacons[i].u64BeaconAddress,au8Payload,2,0);
+        }
+    }
 }
 
 PRIVATE void task_GetTofReadings(void)
 {
+    vUtils_Debug("task_GetTofReadings");
     if (sDemoData.sBeaconState.u8ConnectedBeacons >= 1)
     {
+        vUtils_Debug("dDistanceA is set.");
         sDemoData.sState.dDistanceA = 0.9144; //meters (3 ft)
     }
     if (sDemoData.sBeaconState.u8ConnectedBeacons >= 2)
     {
+        vUtils_Debug("dDistanceB is set");
         sDemoData.sState.dDistanceB = 1.524; //meters (5 ft)
     }
     sDemoData.sState.dDistanceC = 1.2; //meters (4 ft)
@@ -1082,12 +1118,83 @@ PRIVATE void task_GetTofReadings(void)
 
 PRIVATE void task_CalculateXYPos(void)
 {
-    double a = sDemoData.sState.dDistanceA;
-    double b = sDemoData.sState.dDistanceB;
-    double c = sDemoData.sState.dDistanceC;
-    double s = (a + b + c) / 2.0;
-    double y = 2.0 * sqrt(s * (s-a) * (s-b) * (s-c)) / c;
-    double x = sqrt(pow(a, 2) - pow(y, 2));
-    sDemoData.sState.dYpos = y;
-    sDemoData.sState.dXpos = x;
+    vUtils_Debug("task_CalculateXYPos");
+    if (sDemoData.sBeaconState.u8ConnectedBeacons >= 2)
+    {
+        double a = sDemoData.sState.dDistanceA;
+        double b = sDemoData.sState.dDistanceB;
+        double c = sDemoData.sState.dDistanceC;
+        double s = (a + b + c) / 2.0;
+        double y = 2.0 * sqrt(s * (s-a) * (s-b) * (s-c)) / c;
+        double x = sqrt(pow(a, 2) - pow(y, 2));
+        sDemoData.sState.dYpos = y;
+        sDemoData.sState.dXpos = x;
+    }
+    vUtils_Debug("Calculation Complete");
+}
+
+
+
+// reverses a string 'str' of length 'len'
+// retrieved from: https://www.geeksforgeeks.org/convert-floating-point-number-string/
+void reverse(char *str, int len)
+{
+    int i=0, j=len-1, temp;
+    while (i<j)
+    {
+        temp = str[i];
+        str[i] = str[j];
+        str[j] = temp;
+        i++; j--;
+    }
+}
+ 
+ // Converts a given integer x to string str[].  d is the number
+ // of digits required in output. If d is more than the number
+ // of digits in x, then 0s are added at the beginning.
+ // retrieved from https://www.geeksforgeeks.org/convert-floating-point-number-string/
+int intToStr(int x, char str[], int d)
+{
+    int i = 0;
+    while (x)
+    {
+        str[i++] = (x%10) + '0';
+        x = x/10;
+    }
+ 
+    // If number of digits required is more, then
+    // add 0s at the beginning
+    while (i < d)
+        str[i++] = '0';
+ 
+    reverse(str, i);
+    str[i] = '\0';
+    return i;
+}
+ 
+// Converts a floating point number to string.
+// retrieved and modified from: https://www.geeksforgeeks.org/convert-floating-point-number-string/
+PRIVATE void dtoa(double n, char *res, int afterpoint)
+{
+    // Extract integer part
+    int ipart = (int)n;
+ 
+    // Extract floating part
+    double fpart = n - (double)ipart;
+ 
+    // convert integer part to string
+    int i = intToStr(ipart, res, 0);
+ 
+    // check for display option after point
+    if (afterpoint != 0)
+    {
+        res[i] = '.';  // add dot
+ 
+        // Get the value of fraction part upto given no.
+        // of points after dot. The third parameter is needed
+        // to handle cases like 233.007
+        fpart = fpart * pow(10, afterpoint);
+ 
+        intToStr((int)fpart, res + i + 1, afterpoint);
+    }
 }
