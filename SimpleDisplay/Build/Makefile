@@ -122,6 +122,7 @@ INCFLAGS += -I$(COMPONENTS_BASE_DIR)/Jenie/Include
 # Application libraries
 # Specify additional Component libraries
 
+LDLIBS = m
 ##############################################################################
 
 # You should not need to edit below this line

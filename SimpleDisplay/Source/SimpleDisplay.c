@@ -7,7 +7,8 @@
 /* Block (time slice) values */
 #define BLOCK_TIME_IN_32K_PERIODS   1600
 #define BLOCK_GET_TOF               2
-#define BLOCK_UPDATE                (BLOCK_GET_TOF + MAX_BEACONS)
+#define BLOCK_CALCULATE_POSITION    10
+#define BLOCK_UPDATE                (BLOCK_CALCULATE_POSITION + 1)
 #define MAX_BLOCKS                  20
 
 #define CHANNEL_MIN                       11
@@ -41,6 +42,8 @@
 #include <jendefs.h>
 #include <AppHardwareApi.h>
 #include <string.h>
+#include <math.h>
+#include <stdio.h>
 #include "LcdDriver.h"
 #include "JennicLogo.h"
 #include "Button.h"
@@ -105,6 +108,8 @@ typedef struct
         double dDistanceA;
         double dDistanceB;
         double dDistanceC;
+        double dXpos;
+        double dYpos;
     } sState;
 
     struct
@@ -173,6 +178,7 @@ PRIVATE void vSetTimer(void);
 PRIVATE void dataTx_AssignBeaconRole(uint64 beaconAddress, teBeaconAssignment eBeaconRole);
 PRIVATE void interrupt_RegisterBeacon(uint64 beaconAddress);
 PRIVATE void task_GetTofReadings(void);
+PRIVATE void task_CalculateXYPos(void);
 
 /* Stack to application callback functions */
 /****************************************************************************
@@ -565,8 +571,14 @@ PRIVATE void vProcessCurrentTimeBlock(uint8 u8TimeBlock)
     switch (u8TimeBlock)
     {
         // vUtils_Debug("vProcessCurrentTimeBlock");
+        case BLOCK_GET_TOF:
+            task_GetTofReadings();
+            break;
         case BLOCK_UPDATE:
             lcd_UpdateStatusScreen();
+            break;
+        case BLOCK_CALCULATE_POSITION:
+            task_CalculateXYPos();
             break;
     }
 }
@@ -692,11 +704,15 @@ PRIVATE void lcd_BuildStatusScreen(void)
     vLcdWriteText("Esten Rye", 0, 0);
     vLcdWriteTextRightJustified("SEIS 740", 0, 127);
     vLcdWriteText("TOF Triangulation", 1, 0);
-    vLcdWriteText("Node 0:", 3, 0);
-    vLcdWriteTextRightJustified("Off", 3, 60);
-    vLcdWriteText("Node 1:", 3, 64);
-    vLcdWriteTextRightJustified("Off", 3, 123);
-
+    vLcdWriteText("Node 0:", 2, 0);
+    vLcdWriteTextRightJustified("Off", 2, 60);
+    vLcdWriteText("Node 1:", 2, 64);
+    vLcdWriteTextRightJustified("Off", 2, 123);
+    vLcdWriteText("A:", 3, 0);
+    vLcdWriteText("B:", 4, 0);
+    vLcdWriteText("C:", 5, 0);
+    vLcdWriteText("X:", 6, 0);
+    vLcdWriteText("Y:", 7, 0);
     lcd_UpdateStatusScreen();
 }
 
@@ -724,12 +740,12 @@ PRIVATE void lcd_UpdateStatusScreen(void)
 
     if (beacon0Assigned)
     {
-        vLcdWriteTextRightJustified(" On", 3, 60);
+        vLcdWriteTextRightJustified(" On", 2, 60);
         vUtils_Debug("Beacon1");
     }
     if (beacon1Assigned)
     {
-        vLcdWriteTextRightJustified(" On", 3, 123);
+        vLcdWriteTextRightJustified(" On", 2, 123);
         vUtils_Debug("Beacon1");
         
     }
@@ -1062,4 +1078,16 @@ PRIVATE void task_GetTofReadings(void)
         sDemoData.sState.dDistanceB = 1.524; //meters (5 ft)
     }
     sDemoData.sState.dDistanceC = 1.2; //meters (4 ft)
+}
+
+PRIVATE void task_CalculateXYPos(void)
+{
+    double a = sDemoData.sState.dDistanceA;
+    double b = sDemoData.sState.dDistanceB;
+    double c = sDemoData.sState.dDistanceC;
+    double s = (a + b + c) / 2.0;
+    double y = 2.0 * sqrt(s * (s-a) * (s-b) * (s-c)) / c;
+    double x = sqrt(pow(a, 2) - pow(y, 2));
+    sDemoData.sState.dYpos = y;
+    sDemoData.sState.dXpos = x;
 }
