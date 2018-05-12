@@ -1174,12 +1174,12 @@ PRIVATE void task_GetTofReadings(void)
             case E_BEACON_0:
                 beacon0Assigned = TRUE;
                 vUtils_Debug("Beacon 0 TOF Measurment");
-                tof_StartTOF(&sDemoData.sBeaconState.asBeacons[i].sAddrMACBeaconAddress, &asTofDataA, E_BEACON_0);
+                tof_StartTOF(asTofDataA, &(sDemoData.sBeaconState.asBeacons[i].sAddrMACBeaconAddress), E_BEACON_0);
                 break;
             case E_BEACON_1:
                 beacon1Assigned = TRUE;
                 vUtils_Debug("Beacon 1 TOF Measurment");
-                tof_StartTOF(&sDemoData.sBeaconState.asBeacons[i].sAddrMACBeaconAddress, &asTofDataB, E_BEACON_1);
+                tof_StartTOF(asTofDataB, &(sDemoData.sBeaconState.asBeacons[i].sAddrMACBeaconAddress), E_BEACON_1);
                 break;
             case E_BEACON_NOT_ASSIGNED:
                 vUtils_Debug("Beacon Slot Not Assigneed");
@@ -1205,24 +1205,24 @@ PRIVATE void task_GetTofReadings(void)
 
 PRIVATE void task_CalculateTOFDistance(void)
 {
-	int32 s32Mean, s32StanDev, i32TofDistance;
+	int32 n, s32Sum, s32Mean, s32StanDev, i32TofDistance;
 	uint32 u32RssiDistance;
 	double dStd, dMean;
 	uint8  u8NumErrors, u8NumSuccessfullTofs=0;
 
-    tsAppApiTof_Data *asTofData = null;
+    tsAppApiTof_Data *asTofData;
     switch(eTofBeaconRole)
     {
         case E_BEACON_0:
-            asTofData = &asTofDataA;
+            asTofData = asTofDataA;
             break;
         case E_BEACON_1:
-            asTofData = &asTofDataB;
+            asTofData = asTofDataB;
             break;
         default:
             bTofInProgress = FALSE;
             eTofStatus = -1;
-            eBeaconRole = E_BEACON_NOT_ASSIGNED;
+            eTofBeaconRole = E_BEACON_NOT_ASSIGNED;
             break;
     }
     /* Has callback indicated completion of burst */
@@ -1255,7 +1255,7 @@ PRIVATE void task_CalculateTOFDistance(void)
         /* Clear flag to allow next measurement */
         bTofInProgress = FALSE;
         eTofStatus = -1;
-        eBeaconRole = E_BEACON_NOT_ASSIGNED;
+        eTofBeaconRole = E_BEACON_NOT_ASSIGNED;
     } 
 }
 
