@@ -50,6 +50,7 @@
 #include "LedControl.h"
 #include "Jenie.h"
 #include "Utils.h"
+#include <AppApiTof.h>
 
 /****************************************************************************/
 /***        Type Definitions                                              ***/

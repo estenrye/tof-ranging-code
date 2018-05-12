@@ -50,6 +50,7 @@
 #include "LedControl.h"
 #include "Jenie.h"
 #include "Utils.h"
+#include <AppApiTof.h>
 
 /****************************************************************************/
 /***        Macro Definitions                                             ***/
@@ -188,7 +189,7 @@ PUBLIC void vJenie_CbInit(bool_t bWarmStart)
 
         sDemoData.sState.eAppState = E_STATE_REGISTER;
     }
-    
+
     switch(eJenie_Start(E_JENIE_END_DEVICE))        /* Start network as end device */
     {
         case E_JENIE_SUCCESS:

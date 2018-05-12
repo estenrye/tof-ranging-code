@@ -118,6 +118,8 @@ INCFLAGS += -I$(COMPONENTS_BASE_DIR)/Utilities/Include
 INCFLAGS += -I$(COMPONENTS_BASE_DIR)/AppQueueApi/Include 
 INCFLAGS += -I$(COMPONENTS_BASE_DIR)/JenNet/Include 
 INCFLAGS += -I$(COMPONENTS_BASE_DIR)/Jenie/Include 
+INCFLAGS += -I$(COMPONENTS_BASE_DIR)/TOF/Include
+
 ##############################################################################
 # Application libraries
 # Specify additional Component libraries
