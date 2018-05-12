@@ -1203,6 +1203,62 @@ PRIVATE void task_GetTofReadings(void)
     sDemoData.sState.dDistanceC = 1.2; //meters (4 ft)
 }
 
+PRIVATE void task_CalculateTOFDistance(void)
+{
+	int32 s32Mean, s32StanDev, i32TofDistance;
+	uint32 u32RssiDistance;
+	double dStd, dMean;
+	uint8  u8NumErrors, u8NumSuccessfullTofs=0;
+
+    tsAppApiTof_Data *asTofData = null;
+    switch(eTofBeaconRole)
+    {
+        case E_BEACON_0:
+            asTofData = &asTofDataA;
+            break;
+        case E_BEACON_1:
+            asTofData = &asTofDataB;
+            break;
+        default:
+            bTofInProgress = FALSE;
+            eTofStatus = -1;
+            eBeaconRole = E_BEACON_NOT_ASSIGNED;
+            break;
+    }
+    /* Has callback indicated completion of burst */
+    if(eTofStatus != -1)
+    {
+        /* Perform processing if burst sucessfull */
+        if (eTofStatus == TOF_SUCCESS)
+        {
+            u8NumErrors = 0;
+            for(n = 0; n < MAX_READINGS; n++)
+            {
+                if(asTofData[n].u8Status == MAC_TOF_STATUS_SUCCESS)
+                {
+                    s32Sum += asTofData[n].s32Tof;
+                }
+                else
+                {
+                    u8NumErrors++;
+                }
+            }
+            if(u8NumErrors != MAX_READINGS)
+            {
+                dMean = s32Sum / (255 - MAX_READINGS);
+            }
+            else
+            {
+                dMean = 0;
+            }
+        }
+        /* Clear flag to allow next measurement */
+        bTofInProgress = FALSE;
+        eTofStatus = -1;
+        eBeaconRole = E_BEACON_NOT_ASSIGNED;
+    } 
+}
+
 PRIVATE void task_CalculateXYPos(void)
 {
     vUtils_Debug("task_CalculateXYPos");
