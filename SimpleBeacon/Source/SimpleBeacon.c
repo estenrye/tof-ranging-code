@@ -187,66 +187,36 @@ PUBLIC void vJenie_CbInit(bool_t bWarmStart)
 
 
         sDemoData.sState.eAppState = E_STATE_REGISTER;
-        switch(eJenie_Start(E_JENIE_END_DEVICE))        /* Start network as end device */
-        {
-        case E_JENIE_SUCCESS:
-			vUtils_Debug("Jenie Started");
-			vUtils_Debug("E_JENIE_SUCCESS");
-            #ifdef HIGH_POWER
-                /* Set high power mode */
-                eJenie_RadioPower(18, TRUE);
-            #endif
-            break;
-
-        case E_JENIE_ERR_UNKNOWN:
-			vUtils_Debug("E_JENIE_ERR_UNKNOWN");
-			break;
-        case E_JENIE_ERR_INVLD_PARAM:
-			vUtils_Debug("E_JENIE_ERR_INVLD_PARAM");
-			break;
-        case E_JENIE_ERR_STACK_RSRC:
-			vUtils_Debug("E_JENIE_ERR_STACK_RSRC");
-			break;
-        case E_JENIE_ERR_STACK_BUSY:
-			vUtils_Debug("E_JENIE_ERR_STACK_BUSY");
-			break;
-
-        default:
-			vUtils_Debug("Unknown eJenie_Start Status Code");
-			break;
-        }
-    }else{
-
-
-        switch(eJenie_Start(E_JENIE_END_DEVICE))        /* Start network as end device */
-        {
-        case E_JENIE_SUCCESS:
-			vUtils_Debug("E_JENIE_SUCCESS");
-            #ifdef HIGH_POWER
-                /* Set high power mode */
-                eJenie_RadioPower(18, TRUE);
-            #endif
-            break;
-
-        case E_JENIE_ERR_UNKNOWN:
-			vUtils_Debug("E_JENIE_ERR_UNKNOWN");
-			break;
-        case E_JENIE_ERR_INVLD_PARAM:
-			vUtils_Debug("E_JENIE_ERR_INVLD_PARAM");
-			break;
-        case E_JENIE_ERR_STACK_RSRC:
-			vUtils_Debug("E_JENIE_ERR_STACK_RSRC");
-			break;
-        case E_JENIE_ERR_STACK_BUSY:
-			vUtils_Debug("E_JENIE_ERR_STACK_BUSY");
-			break;
-
-        default:
-			vUtils_Debug("Unknown eJenie_Start Status Code");
-			break;
-        }
-
     }
+    
+    switch(eJenie_Start(E_JENIE_END_DEVICE))        /* Start network as end device */
+    {
+        case E_JENIE_SUCCESS:
+            vUtils_Debug("E_JENIE_SUCCESS");
+            #ifdef HIGH_POWER
+                /* Set high power mode */
+                eJenie_RadioPower(18, TRUE);
+            #endif
+            break;
+
+        case E_JENIE_ERR_UNKNOWN:
+            vUtils_Debug("E_JENIE_ERR_UNKNOWN");
+            break;
+        case E_JENIE_ERR_INVLD_PARAM:
+            vUtils_Debug("E_JENIE_ERR_INVLD_PARAM");
+            break;
+        case E_JENIE_ERR_STACK_RSRC:
+            vUtils_Debug("E_JENIE_ERR_STACK_RSRC");
+            break;
+        case E_JENIE_ERR_STACK_BUSY:
+            vUtils_Debug("E_JENIE_ERR_STACK_BUSY");
+            break;
+
+        default:
+            vUtils_Debug("Unknown eJenie_Start Status Code");
+            break;
+    }
+
     /* set watchdog to long timeout - override setting in JenNet startup */
     #ifdef WATCHDOG_ENABLED
        vAHI_WatchdogStart(254);
