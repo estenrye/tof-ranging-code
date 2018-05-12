@@ -59,7 +59,7 @@ extern "C" {
 /****************************************************************************/
 
 /* Define which of the two available hardware UARTs and what baud rate to use */
-#define UART                    E_AHI_UART_0
+#define UART                    E_AHI_UART_1
 
 #define UART_BAUD_RATE          E_AHI_UART_RATE_19200
 
