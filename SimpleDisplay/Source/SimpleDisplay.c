@@ -52,6 +52,7 @@
 #include "Jenie.h"
 #include "Utils.h"
 #include <AppApiTof.h>
+#include <mac_sap.h>
 
 /****************************************************************************/
 /***        Type Definitions                                              ***/
@@ -66,6 +67,7 @@ typedef enum
 typedef struct
 {
     uint64 u64BeaconAddress;
+    MAC_Addr_s sAddrMACBeaconAddress;
     teBeaconAssignment eBeaconRole;
 } tsBeaconData;
 
@@ -160,6 +162,7 @@ PRIVATE bool_t bKeyDebounce = FALSE;
 PRIVATE tsJenieRoutingTable asRoutingTable[100];
 
 PRIVATE eTofReturn eTofStatus = -1;
+PRIVATE teBeaconAssignment eTofBeaconRole = E_BEACON_NOT_ASSIGNED;
 PRIVATE volatile bool_t bTofInProgress = FALSE;
 PRIVATE tsAppApiTof_Data asTofDataA[MAX_READINGS];
 PRIVATE tsAppApiTof_Data asTofDataB[MAX_READINGS];
@@ -185,6 +188,8 @@ PRIVATE void button_ProcessSetChannelKeyPress(uint8 u8KeyMap);
 PRIVATE void vSetTimer(void);
 PRIVATE void dataTx_AssignBeaconRole(void);
 PRIVATE void interrupt_RegisterBeacon(uint64 beaconAddress);
+PRIVATE void interrupt_TofCallback(eTofReturn eStatus);
+PRIVATE void tof_StartTOF(tsAppApiTof_Data *pTofData, MAC_Addr_s *pAddr, teBeaconAssignment eBeaconRole);
 PRIVATE void task_GetTofReadings(void);
 PRIVATE void task_CalculateXYPos(void);
 PRIVATE void reverse(char *str, int len);
@@ -542,7 +547,7 @@ PRIVATE void vInitSystem(void)
     }
 
     vAppApiTofInit(TRUE);
-    
+
     /* Calibrate wake timer */
     sDemoData.sSystem.u32CalibratedTimeout = BLOCK_TIME_IN_32K_PERIODS * 10000 / u32AHI_WakeTimerCalibrate();
 
@@ -570,6 +575,10 @@ PRIVATE void vInitCoord(void)
     for (i=0; i<MAX_BEACONS; i++)
     {
         sDemoData.sBeaconState.asBeacons[i].eBeaconRole = E_BEACON_NOT_ASSIGNED;
+        sDemoData.sBeaconState.asBeacons[i].sAddrMACBeaconAddress.u8AddrMode = 3;
+        sDemoData.sBeaconState.asBeacons[i].sAddrMACBeaconAddress.u16PanId = DEMO_PAN_ID;
+        sDemoData.sBeaconState.asBeacons[i].sAddrMACBeaconAddress.uAddr.sExt.u32L = 0ULL & 0x00000000ffffffff;
+        sDemoData.sBeaconState.asBeacons[i].sAddrMACBeaconAddress.uAddr.sExt.u32H = 0ULL >> 32;
         sDemoData.sBeaconState.asBeacons[i].u64BeaconAddress = 0ULL;
     }
     sDemoData.sBeaconState.u8ConnectedBeacons = 0;
@@ -1104,6 +1113,8 @@ PRIVATE void interrupt_RegisterBeacon(uint64 beaconAddress)
             if (sDemoData.sBeaconState.asBeacons[i].eBeaconRole == E_BEACON_NOT_ASSIGNED)
             {
                 sDemoData.sBeaconState.asBeacons[i].u64BeaconAddress = beaconAddress;
+                sDemoData.sBeaconState.asBeacons[i].sAddrMACBeaconAddress.uAddr.sExt.u32L = beaconAddress & 0x00000000ffffffff;
+                sDemoData.sBeaconState.asBeacons[i].sAddrMACBeaconAddress.uAddr.sExt.u32H = beaconAddress >> 32;
                 sDemoData.sBeaconState.asBeacons[i].eBeaconRole = eBeaconRole;
                 break;
             }
@@ -1129,8 +1140,55 @@ PRIVATE void dataTx_AssignBeaconRole(void)
     }
 }
 
+PRIVATE void tof_StartTOF(tsAppApiTof_Data *pTofData, MAC_Addr_s *pAddr, teBeaconAssignment eBeaconRole)
+{
+    if (bTofInProgress == FALSE)
+    {
+        vUtils_Debug("Starting TOF Measurement.");
+        // Set eTofStatus to invalid value. 
+        // Will be updated in ToF callback 
+        eTofStatus = -1;
+        eTofBeaconRole = eBeaconRole;
+        bTofInProgress = bAppApiGetTof(pTofData, pAddr, MAX_READINGS, API_TOF_FORWARDS, interrupt_TofCallback);
+    }
+    else
+    {
+        vUtils_Debug("Skipping TOF Measurement.");
+    }
+}
+
+PRIVATE void interrupt_TofCallback(eTofReturn eStatus)
+{
+	eTofStatus = eStatus;
+}
+
 PRIVATE void task_GetTofReadings(void)
 {
+    bool_t beacon0Assigned = FALSE;
+    bool_t beacon1Assigned = FALSE;
+    int i;
+    for (i=0; i<sDemoData.sBeaconState.u8ConnectedBeacons; i++)
+    {
+        switch(sDemoData.sBeaconState.asBeacons[i].eBeaconRole)
+        {
+            case E_BEACON_0:
+                beacon0Assigned = TRUE;
+                vUtils_Debug("Beacon 0 TOF Measurment");
+                tof_StartTOF(&sDemoData.sBeaconState.asBeacons[i].sAddrMACBeaconAddress, &asTofDataA, E_BEACON_0);
+                break;
+            case E_BEACON_1:
+                beacon1Assigned = TRUE;
+                vUtils_Debug("Beacon 1 TOF Measurment");
+                tof_StartTOF(&sDemoData.sBeaconState.asBeacons[i].sAddrMACBeaconAddress, &asTofDataB, E_BEACON_1);
+                break;
+            case E_BEACON_NOT_ASSIGNED:
+                vUtils_Debug("Beacon Slot Not Assigneed");
+                break;
+            default:
+                vUtils_Debug("Unknown Beacon Role");
+                break;
+        }
+    }
     vUtils_Debug("task_GetTofReadings");
     if (sDemoData.sBeaconState.u8ConnectedBeacons >= 1)
     {
