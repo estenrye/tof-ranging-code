@@ -84,6 +84,8 @@ APP_BLD_DIR			= $(APP_BASE)/$(TARGET)/Build
 APP_SRC_DIR 	        	= $(APP_BASE)/$(TARGET)/Source
 APP_COMMON_SRC_DIR = $(APP_BASE)/Common/Source
 
+CMP_SRC_DIRS        = $(COMPONENTS_BASE_DIR)/Utilities/Source
+
 # Use if application directory contains single target
 #SDK_BASE_DIR         	= $(abspath ../../..)
 #APP_BASE            		= $(abspath ..)
@@ -96,6 +98,7 @@ APP_COMMON_SRC_DIR = $(APP_BASE)/Common/Source
 # Note: Path to source file is found using vpath below, so only .c filename is required
 APPSRC += ${TARGET}.c
 APPSRC += Utils.c
+APPSRC += Printf.c
 
 ##############################################################################
 # Additional Application Source directories
@@ -118,6 +121,8 @@ INCFLAGS += -I$(COMPONENTS_BASE_DIR)/AppQueueApi/Include
 INCFLAGS += -I$(COMPONENTS_BASE_DIR)/JenNet/Include 
 INCFLAGS += -I$(COMPONENTS_BASE_DIR)/Jenie/Include 
 INCFLAGS += -I$(COMPONENTS_BASE_DIR)/TOF/Include
+
+
 
 ##############################################################################
 # Application libraries
@@ -159,7 +164,7 @@ LDLIBS := $(addsuffix _$(JENNIC_CHIP_FAMILY),$(APPLIBS)) $(LDLIBS)
 
 .PHONY: all clean
 # Path to directories containing application source 
-vpath % $(APP_SRC_DIR):$(APP_COMMON_SRC_DIR):$(ADDITIONAL_SRC_DIR)
+vpath % $(APP_SRC_DIR):$(APP_COMMON_SRC_DIR):$(ADDITIONAL_SRC_DIR):$(CMP_SRC_DIRS)
 
 
 all: $(TARGET)_$(JENNIC_CHIP)$(BIN_SUFFIX).bin

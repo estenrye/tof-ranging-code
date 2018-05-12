@@ -4,11 +4,15 @@
 /****************************************************************************/
 #define MAX_BEACONS                 2
 #define MAX_READINGS                10
-
+#define DEBUG_NETWORK_STACK TRUE
+#define DEBUG_APPSTATE TRUE
 /* Block (time slice) values */
 #define BLOCK_TIME_IN_32K_PERIODS   1600
 #define BLOCK_REGISTER_BEACONS      0
-#define BLOCK_GET_TOF               2
+#define BLOCK_GET_TOF_A             2
+#define BLOCK_CALCULATE_DISTANCE_A  4
+#define BLOCK_GET_TOF_B             6
+#define BLOCK_CALCULATE_DISTANCE_B  8
 #define BLOCK_CALCULATE_POSITION    10
 #define BLOCK_UPDATE                (BLOCK_CALCULATE_POSITION + 1)
 #define MAX_BLOCKS                  20
@@ -53,6 +57,7 @@
 #include "Utils.h"
 #include <AppApiTof.h>
 #include <mac_sap.h>
+#include "Printf.h"
 
 /****************************************************************************/
 /***        Type Definitions                                              ***/
@@ -162,10 +167,20 @@ PRIVATE bool_t bKeyDebounce = FALSE;
 PRIVATE tsJenieRoutingTable asRoutingTable[100];
 
 PRIVATE eTofReturn eTofStatus = -1;
-PRIVATE teBeaconAssignment eTofBeaconRole = E_BEACON_NOT_ASSIGNED;
 PRIVATE volatile bool_t bTofInProgress = FALSE;
 PRIVATE tsAppApiTof_Data asTofDataA[MAX_READINGS];
 PRIVATE tsAppApiTof_Data asTofDataB[MAX_READINGS];
+
+/* RSSI to Distance (cm) lookup table. Generated from formula in JN-UG-3063 */
+uint32 au32RSSIdistance[] = { 502377, 447744, 399052, 355656, 316979, 282508,
+		251785, 224404, 200000, 178250, 158866, 141589, 126191, 112468, 100237,
+		89337, 79621, 70963, 63246, 56368, 50238, 44774, 39905, 35566, 31698,
+		28251, 25179, 22440, 20000, 17825, 15887, 14159, 12619, 11247, 10024,
+		8934, 7962, 7096, 6325, 5637, 5024, 4477, 3991, 3557, 3170, 2825, 2518,
+		2244, 2000, 1783, 1589, 1416, 1262, 1125, 1002, 893, 796, 710, 632,
+		564, 502, 448, 399, 356, 317, 283, 252, 224, 200, 178, 159, 142, 126,
+		112, 100, 89, 80, 71, 63, 56, 50, 45, 40, 36, 32, 28, 25, 22, 20, 18,
+		16, 14, 13, 11, 10, 9, 8, 7, 6, 6, 5, 4, 4, 4, 3, 3, 3, 2, 2 };
 
 /****************************************************************************/
 /***        Local Function Prototypes                                     ***/
@@ -189,12 +204,14 @@ PRIVATE void vSetTimer(void);
 PRIVATE void dataTx_AssignBeaconRole(void);
 PRIVATE void interrupt_RegisterBeacon(uint64 beaconAddress);
 PRIVATE void interrupt_TofCallback(eTofReturn eStatus);
-PRIVATE void tof_StartTOF(tsAppApiTof_Data *pTofData, MAC_Addr_s *pAddr, teBeaconAssignment eBeaconRole);
-PRIVATE void task_GetTofReadings(void);
+PRIVATE void task_StartTOF(tsAppApiTof_Data *pTofData, int iBeacon);
+PRIVATE void task_CalculateTOFDistance(tsAppApiTof_Data *asTofData, double *distance);
 PRIVATE void task_CalculateXYPos(void);
 PRIVATE void reverse(char *str, int len);
 PRIVATE int intToStr(int x, char str[], int d);
 PRIVATE void dtoa(double n, char *res, int afterpoint);
+PRIVATE void vPutChar(unsigned char c);
+
 /* Stack to application callback functions */
 /****************************************************************************
  *
@@ -217,7 +234,9 @@ PUBLIC void vJenie_CbConfigureNetwork(void)
     vLcdResetDefault();
 
     vUtils_Init();
-    vUtils_Debug("vJenie_CbConfigureNetwork");
+    #ifdef DEBUG_NETWORK_STACK
+        vUtils_Debug("vJenie_CbConfigureNetwork");
+    #endif
     sDemoData.sSystem.u8Channel = CHANNEL_MID;
 
     lcd_BuildSetChannelScreen();
@@ -241,7 +260,9 @@ PUBLIC void vJenie_CbConfigureNetwork(void)
     gJenie_RoutingEnabled    = TRUE;
     gJenie_RoutingTableSize  = 100;
     gJenie_RoutingTableSpace = (void *)asRoutingTable;
-    vUtils_Debug("exiting vJenie_CbConfigureNetwork");
+    #ifdef DEBUG_NETWORK_STACK
+        vUtils_Debug("exiting vJenie_CbConfigureNetwork");
+    #endif
 }
 
 PUBLIC void vJenie_CbInit(bool_t bWarmStart)
@@ -254,36 +275,41 @@ PUBLIC void vJenie_CbInit(bool_t bWarmStart)
     {
         sHomeData.bStackReady=FALSE;
         sHomeData.eAppState = E_STATE_STARTUP;
-        vUtils_Debug("E_STATE_STARTUP");
+        #ifdef DEBUG_APPSTATE
+            vUtils_Debug("E_STATE_STARTUP");
+        #endif
         vInitSystem();
 
         vInitCoord();
 
         vSetTimer();
+        vInitPrintf((void *)vPutChar);
+
         switch (eJenie_Start(E_JENIE_COORDINATOR))        /* Start network as coordinator */
         {
-        case E_JENIE_SUCCESS:
-            vUtils_Debug("E_JENIE_SUCCESS");
-            #ifdef HIGH_POWER
-                /* Set high power mode */
-                eJenie_RadioPower(18, TRUE);
+            case E_JENIE_SUCCESS:
+                vUtils_Debug("E_JENIE_SUCCESS");
+                #ifdef HIGH_POWER
+                    /* Set high power mode */
+                    eJenie_RadioPower(18, TRUE);
+                #endif
+                break;
+            #ifdef DEBUG_NETWORK_STACK
+                case E_JENIE_ERR_UNKNOWN:
+                    vUtils_Debug("E_JENIE_ERR_UNKNOWN");
+                    break;
+                case E_JENIE_ERR_INVLD_PARAM:
+                    vUtils_Debug("E_JENIE_ERR_INVLD_PARAM");
+                    break;
+                case E_JENIE_ERR_STACK_RSRC:
+                    vUtils_Debug("E_JENIE_ERR_STACK_RSRC");
+                    break;
+                case E_JENIE_ERR_STACK_BUSY:
+                    vUtils_Debug("E_JENIE_ERR_STACK_BUSY");
+                    break;
             #endif
-            break;
-
-            case E_JENIE_ERR_UNKNOWN:
-                vUtils_Debug("E_JENIE_ERR_UNKNOWN");
-                break;
-            case E_JENIE_ERR_INVLD_PARAM:
-                vUtils_Debug("E_JENIE_ERR_INVLD_PARAM");
-                break;
-            case E_JENIE_ERR_STACK_RSRC:
-                vUtils_Debug("E_JENIE_ERR_STACK_RSRC");
-                break;
-            case E_JENIE_ERR_STACK_BUSY:
-                vUtils_Debug("E_JENIE_ERR_STACK_BUSY");
-                break;
             default:
-                vUtils_Debug("default");
+                vUtils_Debug("Unexpected Network Stack Startup Error");
                 break;
         }
     }
@@ -318,7 +344,9 @@ PUBLIC void vJenie_CbMain(void)
         switch (sHomeData.eAppState)
         {
         case E_STATE_STARTUP:
-            vUtils_Debug("E_STATE_STARTUP");
+            #ifdef DEBUG_APPSTATE
+                vUtils_Debug("E_STATE_STARTUP");
+            #endif
             if (!(bJenie_GetPermitJoin() ))
             {
                 eJenie_SetPermitJoin(TRUE);
@@ -328,7 +356,9 @@ PUBLIC void vJenie_CbMain(void)
             break;
 
         case E_STATE_RUNNING:
-            vUtils_Debug("E_STATE_RUNNING");
+            #ifdef DEBUG_APPSTATE
+                vUtils_Debug("E_STATE_RUNNING");
+            #endif
             vSetTimer();
             /* Perform scheduler action */
             vProcessCurrentTimeBlock(u8TimeBlock);
@@ -341,7 +371,9 @@ PUBLIC void vJenie_CbMain(void)
             break;
 
         case E_STATE_WAITING:
-            vUtils_Debug("E_STATE_WAITING");        
+            #ifdef DEBUG_APPSTATE
+                vUtils_Debug("E_STATE_WAITING");        
+            #endif
             if (bTimer0Fired)
             {
                 bTimer0Fired = FALSE;
@@ -349,10 +381,14 @@ PUBLIC void vJenie_CbMain(void)
             }
             break;
         case E_STATE_JOINING_BEACON:
-            vUtils_Debug("E_STATE_JOINING_BEACON");
+            #ifdef DEBUG_APPSTATE
+                vUtils_Debug("E_STATE_JOINING_BEACON");
+            #endif
             break;
         default:
-            vUtils_Debug("default");
+            #ifdef DEBUG_APPSTATE
+                vUtils_Debug("default");
+            #endif
             break;
         }
     }
@@ -378,49 +414,52 @@ PUBLIC void vJenie_CbStackMgmtEvent(teEventType eEventType, void *pvEventPrim)
     vUtils_Debug("vJenie_CbStackMgmtEvent");
     switch (eEventType)
     {
-    case E_JENIE_NETWORK_UP:
-        vUtils_Debug("E_JENIE_NETWORK_UP");
-        sHomeData.bStackReady=TRUE;
-        break;
-
-        case E_JENIE_REG_SVC_RSP:
-            vUtils_Debug("E_JENIE_REG_SVC_RSP");
-            break;
-
-        case E_JENIE_SVC_REQ_RSP:
-            vUtils_Debug("E_JENIE_SVC_REQ_RSP");
-            break;
-
-        case E_JENIE_POLL_CMPLT:
-            vUtils_Debug("E_JENIE_POLL_CMPLT");
-            break;
-
-        case E_JENIE_PACKET_SENT:
-            vUtils_Debug("E_JENIE_PACKET_SENT");
-            break;
-
-        case E_JENIE_PACKET_FAILED:
-            vUtils_Debug("E_JENIE_PACKET_FAILED");
+        case E_JENIE_NETWORK_UP:
+            vUtils_Debug("E_JENIE_NETWORK_UP");
+            sHomeData.bStackReady=TRUE;
             break;
 
         case E_JENIE_CHILD_JOINED:
             sHomeData.eAppState = E_STATE_JOINING_BEACON;
-            vUtils_Debug("E_JENIE_CHILD_JOINED");
-            vUtils_DisplayMsg("Child Joined: ",(uint32)(((tsChildJoined*)pvEventPrim)->u64SrcAddress));
+            vPrintf("E_JENIE_CHILD_JOINED\n");
+            vUtils_DisplayMsg("Child Joined:",(uint32)(((tsChildJoined*)pvEventPrim)->u64SrcAddress));
             interrupt_RegisterBeacon((((tsChildJoined*)pvEventPrim)->u64SrcAddress));
             vSetTimer();
             sHomeData.eAppState = E_STATE_WAITING;
             break;
-        case E_JENIE_CHILD_LEAVE:
-            vUtils_Debug("E_JENIE_CHILD_LEAVE");
-            vUtils_DisplayMsg("Child Left: ",(uint32)(((tsChildLeave*)pvEventPrim)->u64SrcAddress));
-            break;
-        case E_JENIE_CHILD_REJECTED:
-            vUtils_Debug("E_JENIE_CHILD_REJECTED");
-            vUtils_DisplayMsg("Child Left: ",(uint32)(((tsChildRejected*)pvEventPrim)->u64SrcAddress));            
-            break;
+
+        #ifdef DEBUG_NETWORK_STACK
+            case E_JENIE_REG_SVC_RSP:
+                vUtils_Debug("E_JENIE_REG_SVC_RSP");
+                break;
+
+            case E_JENIE_SVC_REQ_RSP:
+                vUtils_Debug("E_JENIE_SVC_REQ_RSP");
+                break;
+
+            case E_JENIE_POLL_CMPLT:
+                vUtils_Debug("E_JENIE_POLL_CMPLT");
+                break;
+
+            case E_JENIE_PACKET_SENT:
+                vUtils_Debug("E_JENIE_PACKET_SENT");
+                break;
+
+            case E_JENIE_PACKET_FAILED:
+                vUtils_Debug("E_JENIE_PACKET_FAILED");
+                break;
+
+            case E_JENIE_CHILD_LEAVE:
+                vUtils_Debug("E_JENIE_CHILD_LEAVE");
+                vUtils_DisplayMsg("Child Left: ",(uint32)(((tsChildLeave*)pvEventPrim)->u64SrcAddress));
+                break;
+            case E_JENIE_CHILD_REJECTED:
+                vUtils_Debug("E_JENIE_CHILD_REJECTED");
+                vUtils_DisplayMsg("Child Left: ",(uint32)(((tsChildRejected*)pvEventPrim)->u64SrcAddress));            
+                break;
+        #endif
         default:
-            vUtils_Debug("default");
+            vUtils_Debug("Unexpected Network Stack Management Event.");
             /* Unknown data event type */
             break;
     }
@@ -446,24 +485,25 @@ PUBLIC void vJenie_CbStackDataEvent(teEventType eEventType, void *pvEventPrim)
 {
     switch (eEventType)
     {
-    case E_JENIE_DATA:
-        vUtils_Debug("E_JENIE_DATA");    
-        break;
+        #ifdef DEBUG_NETWORK_STACK
+            case E_JENIE_DATA:
+                vUtils_Debug("E_JENIE_DATA");    
+                break;
 
-        case E_JENIE_DATA_TO_SERVICE:
-            vUtils_Debug("E_JENIE_DATA_TO_SERVICE");
-            break;
+            case E_JENIE_DATA_TO_SERVICE:
+                vUtils_Debug("E_JENIE_DATA_TO_SERVICE");
+                break;
 
-        case E_JENIE_DATA_ACK:
-            vUtils_Debug("E_JENIE_DATA_ACK");
-            break;
+            case E_JENIE_DATA_ACK:
+                vUtils_Debug("E_JENIE_DATA_ACK");
+                break;
 
-        case E_JENIE_DATA_TO_SERVICE_ACK:
-            vUtils_Debug("E_JENIE_DATA_TO_SERVICE_ACK");
-            break;
-
+            case E_JENIE_DATA_TO_SERVICE_ACK:
+                vUtils_Debug("E_JENIE_DATA_TO_SERVICE_ACK");
+                break;
+        #endif
         default:
-            vUtils_Debug("default");
+            vUtils_Debug("Unexpected Network Stack Data Event");
         break;
     }
 }
@@ -489,7 +529,9 @@ PUBLIC void vJenie_CbHwEvent(uint32 u32DeviceId,uint32 u32ItemBitmap)
     if ((u32DeviceId == E_AHI_DEVICE_SYSCTRL)
                 && (u32ItemBitmap & (1 << E_AHI_SYSCTRL_WK0)))      /* added for timer 0 interrupt */
     {
-        vUtils_Debug("Timer Fired.");
+        #ifdef DEBUG_APPSTATE
+            vUtils_Debug("Timer Fired.");
+        #endif
         bTimer0Fired = TRUE;
 
     } else if ((u32DeviceId == E_AHI_DEVICE_SYSCTRL)
@@ -523,30 +565,6 @@ PRIVATE void vInitSystem(void)
     vLedControl(2, TRUE);
     vLedControl(3, TRUE);
     vLedInitFfd();
-    int n;
-    for(n = 0; n < MAX_READINGS; n++)
-    {
-        asTofDataA[n].s32Tof       = 0;
-        asTofDataA[n].s8LocalRSSI  = 0;
-        asTofDataA[n].u8LocalSQI   = 0;
-        asTofDataA[n].s8RemoteRSSI = 0;
-        asTofDataA[n].u8RemoteSQI  = 0;
-        asTofDataA[n].u32Timestamp = 0;
-        asTofDataA[n].u8Status     = 0;
-    }
-
-    for(n = 0; n < MAX_READINGS; n++)
-    {
-        asTofDataB[n].s32Tof       = 0;
-        asTofDataB[n].s8LocalRSSI  = 0;
-        asTofDataB[n].u8LocalSQI   = 0;
-        asTofDataB[n].s8RemoteRSSI = 0;
-        asTofDataB[n].u8RemoteSQI  = 0;
-        asTofDataB[n].u32Timestamp = 0;
-        asTofDataB[n].u8Status     = 0;
-    }
-
-    vAppApiTofInit(TRUE);
 
     /* Calibrate wake timer */
     sDemoData.sSystem.u32CalibratedTimeout = BLOCK_TIME_IN_32K_PERIODS * 10000 / u32AHI_WakeTimerCalibrate();
@@ -582,9 +600,34 @@ PRIVATE void vInitCoord(void)
         sDemoData.sBeaconState.asBeacons[i].u64BeaconAddress = 0ULL;
     }
     sDemoData.sBeaconState.u8ConnectedBeacons = 0;
+    sDemoData.sState.dDistanceC = 1.2; //meters (4 ft)
+
+    // Prep Measurement Arrays.
+    int n;
+    for(n = 0; n < MAX_READINGS; n++)
+    {
+        asTofDataA[n].s32Tof       = 0;
+        asTofDataA[n].s8LocalRSSI  = 0;
+        asTofDataA[n].u8LocalSQI   = 0;
+        asTofDataA[n].s8RemoteRSSI = 0;
+        asTofDataA[n].u8RemoteSQI  = 0;
+        asTofDataA[n].u32Timestamp = 0;
+        asTofDataA[n].u8Status     = 0;
+    }
+
+    for(n = 0; n < MAX_READINGS; n++)
+    {
+        asTofDataB[n].s32Tof       = 0;
+        asTofDataB[n].s8LocalRSSI  = 0;
+        asTofDataB[n].u8LocalSQI   = 0;
+        asTofDataB[n].s8RemoteRSSI = 0;
+        asTofDataB[n].u8RemoteSQI  = 0;
+        asTofDataB[n].u32Timestamp = 0;
+        asTofDataB[n].u8Status     = 0;
+    }
 
     /* Enable TOF ranging. */
-    // vAppApiTofInit(TRUE);
+    vAppApiTofInit(TRUE);
 
     /* Get software version numbers */
     sDemoData.sSystem.u32AppApiVersion = u32Jenie_GetVersion(E_JENIE_COMPONENT_MAC);
@@ -618,9 +661,21 @@ PRIVATE void vProcessCurrentTimeBlock(uint8 u8TimeBlock)
     /* Process current block scheduled activity */
     switch (u8TimeBlock)
     {
-        // vUtils_Debug("vProcessCurrentTimeBlock");
-        case BLOCK_GET_TOF:
-            task_GetTofReadings();
+        case BLOCK_GET_TOF_A:
+            vPrintf("BLOCK_GET_TOF_A\n");
+            task_StartTOF(asTofDataA, 0);
+            break;
+        case BLOCK_CALCULATE_DISTANCE_A:
+            vPrintf("BLOCK_CALCULATE_DISTANCE_A\n");
+            task_CalculateTOFDistance(asTofDataA, &(sDemoData.sState.dDistanceA));
+            break;
+        case BLOCK_GET_TOF_B:
+            vPrintf("BLOCK_GET_TOF_B\n");
+            task_StartTOF(asTofDataB, 1);
+            break;
+        case BLOCK_CALCULATE_DISTANCE_B:
+            vPrintf("BLOCK_CALCULATE_DISTANCE_B\n");
+            task_CalculateTOFDistance(asTofDataB, &(sDemoData.sState.dDistanceB));
             break;
         case BLOCK_REGISTER_BEACONS:
             dataTx_AssignBeaconRole();
@@ -1028,7 +1083,7 @@ PRIVATE uint8 u8UpdateTimeBlock(uint8 u8TimeBlock)
             u8TimeBlock = 0;
         }
     }
-    vUtils_DisplayMsg("vProcessCurrentTimeBlock", u8TimeBlock);        
+    vPrintf("vProcessCurrentTimeBlock: %i\n", u8TimeBlock);        
 
     return u8TimeBlock;
 }
@@ -1047,7 +1102,9 @@ PRIVATE uint8 u8UpdateTimeBlock(uint8 u8TimeBlock)
  ****************************************************************************/
 PRIVATE void vSetTimer(void)
 {
-    vUtils_Debug("Timer Set");
+    #ifdef DEBUG_APPSTATE
+        vUtils_Debug("Timer Set");
+    #endif
     /* Set timer for next block */
     vAHI_WakeTimerStart(E_AHI_WAKE_TIMER_0, sDemoData.sSystem.u32CalibratedTimeout);
 }
@@ -1140,123 +1197,174 @@ PRIVATE void dataTx_AssignBeaconRole(void)
     }
 }
 
-PRIVATE void tof_StartTOF(tsAppApiTof_Data *pTofData, MAC_Addr_s *pAddr, teBeaconAssignment eBeaconRole)
+PRIVATE void task_StartTOF(tsAppApiTof_Data *pTofData, int iBeacon)
 {
-    if (bTofInProgress == FALSE)
+    switch(sDemoData.sBeaconState.asBeacons[iBeacon].eBeaconRole)
     {
-        vUtils_Debug("Starting TOF Measurement.");
-        // Set eTofStatus to invalid value. 
-        // Will be updated in ToF callback 
-        eTofStatus = -1;
-        eTofBeaconRole = eBeaconRole;
-        bTofInProgress = bAppApiGetTof(pTofData, pAddr, MAX_READINGS, API_TOF_FORWARDS, interrupt_TofCallback);
-    }
-    else
-    {
-        vUtils_Debug("Skipping TOF Measurement.");
+        case E_BEACON_0:
+        case E_BEACON_1:
+            if (bTofInProgress == FALSE)
+            {
+                vUtils_Debug("Starting TOF Measurement.");
+                // Set eTofStatus to invalid value. 
+                // Will be updated in ToF callback 
+                eTofStatus = -1;
+                bTofInProgress = bAppApiGetTof(pTofData, &(sDemoData.sBeaconState.asBeacons[iBeacon].sAddrMACBeaconAddress), MAX_READINGS, API_TOF_FORWARDS, interrupt_TofCallback);
+            }
+            else
+            {
+                vUtils_Debug("Skipping TOF Measurement.");
+            }
+            break;
+        default:
+            vUtils_Debug("Skipping TOF Measurement.");
+            break;
     }
 }
 
 PRIVATE void interrupt_TofCallback(eTofReturn eStatus)
 {
+    vUtils_Debug("\ninterrupt_TofCallback\n");
 	eTofStatus = eStatus;
+    switch(eStatus)
+    {
+        case MAC_TOF_STATUS_SUCCESS:
+            vPrintf("eTofStatus: MAC_TOF_STATUS_SUCCESS  Reading completed successfully\n");
+            break;
+        case MAC_TOF_STATUS_RTE:
+            vPrintf("eTofStatus: MAC_TOF_STATUS_RTE  Remote time value invalid\n");
+            break;
+        case MAC_TOF_STATUS_LTE:
+            vPrintf("eTofStatus: MAC_TOF_STATUS_LTE  Local time value invalid\n");
+            break;
+        case MAC_TOF_STATUS_NOACK:
+            vPrintf("eTofStatus: MAC_TOF_STATUS_NOACK  Failed to receive acknowledgement\n");
+            break;
+        case MAC_TOF_STATUS_DATAERROR:
+            vPrintf("eTofStatus: MAC_TOF_STATUS_DATAERROR  Failed to receive data from remote node\n");
+            break;
+        default:
+            vPrintf("eTofStatus: %i  Invalid Status\n", eStatus);
+            break;
+    }
+    vSetTimer();
+
 }
 
-PRIVATE void task_GetTofReadings(void)
+PRIVATE void task_CalculateTOFDistance(tsAppApiTof_Data *asTofData, double *distance)
 {
-    bool_t beacon0Assigned = FALSE;
-    bool_t beacon1Assigned = FALSE;
-    int i;
-    for (i=0; i<sDemoData.sBeaconState.u8ConnectedBeacons; i++)
-    {
-        switch(sDemoData.sBeaconState.asBeacons[i].eBeaconRole)
-        {
-            case E_BEACON_0:
-                beacon0Assigned = TRUE;
-                vUtils_Debug("Beacon 0 TOF Measurment");
-                tof_StartTOF(asTofDataA, &(sDemoData.sBeaconState.asBeacons[i].sAddrMACBeaconAddress), E_BEACON_0);
-                break;
-            case E_BEACON_1:
-                beacon1Assigned = TRUE;
-                vUtils_Debug("Beacon 1 TOF Measurment");
-                tof_StartTOF(asTofDataB, &(sDemoData.sBeaconState.asBeacons[i].sAddrMACBeaconAddress), E_BEACON_1);
-                break;
-            case E_BEACON_NOT_ASSIGNED:
-                vUtils_Debug("Beacon Slot Not Assigneed");
-                break;
-            default:
-                vUtils_Debug("Unknown Beacon Role");
-                break;
-        }
-    }
-    vUtils_Debug("task_GetTofReadings");
-    if (sDemoData.sBeaconState.u8ConnectedBeacons >= 1)
-    {
-        vUtils_Debug("dDistanceA is set.");
-        sDemoData.sState.dDistanceA = 0.9144; //meters (3 ft)
-    }
-    if (sDemoData.sBeaconState.u8ConnectedBeacons >= 2)
-    {
-        vUtils_Debug("dDistanceB is set");
-        sDemoData.sState.dDistanceB = 1.524; //meters (5 ft)
-    }
-    sDemoData.sState.dDistanceC = 1.2; //meters (4 ft)
-}
-
-PRIVATE void task_CalculateTOFDistance(void)
-{
-	int32 n, s32Sum, s32Mean, s32StanDev, i32TofDistance;
+	int n;
+	int32 s32Mean, s32StanDev;
+    double dTofDistance = 0;
 	uint32 u32RssiDistance;
 	double dStd, dMean;
 	uint8  u8NumErrors, u8NumSuccessfullTofs=0;
-
-    tsAppApiTof_Data *asTofData;
-    switch(eTofBeaconRole)
-    {
-        case E_BEACON_0:
-            asTofData = asTofDataA;
-            break;
-        case E_BEACON_1:
-            asTofData = asTofDataB;
-            break;
-        default:
-            bTofInProgress = FALSE;
-            eTofStatus = -1;
-            eTofBeaconRole = E_BEACON_NOT_ASSIGNED;
-            break;
-    }
+    
     /* Has callback indicated completion of burst */
-    if(eTofStatus != -1)
+    /* Check for return code to have been set in callback */
+    if (eTofStatus != -1)
     {
-        /* Perform processing if burst sucessfull */
         if (eTofStatus == TOF_SUCCESS)
         {
+            u8NumSuccessfullTofs++;
+
+            double dAcc = 0.0;
+            u32RssiDistance = 0;
+
             u8NumErrors = 0;
+
+            vPrintf("\n\n| #  \x1BH| ToF (ps) \x1BH| Lcl RSSI \x1BH| Lcl SQI \x1BH| Rmt RSSI \x1BH| Rmt SQI \x1BH| Timestamp \x1BH| Status \x1BH|");
+            vPrintf("\n--------------------------------------------------------------------------------");
+
             for(n = 0; n < MAX_READINGS; n++)
             {
-                if(asTofData[n].u8Status == MAC_TOF_STATUS_SUCCESS)
+                vPrintf("\n|%d",n);
+
+                /* Only include successful readings */
+                if (asTofData[n].u8Status == MAC_TOF_STATUS_SUCCESS)
                 {
-                    s32Sum += asTofData[n].s32Tof;
+                    dAcc += asTofData[n].s32Tof;
+                    u32RssiDistance += au32RSSIdistance[asTofData[n].s8LocalRSSI];
+                    u32RssiDistance += au32RSSIdistance[asTofData[n].s8RemoteRSSI];
+
+                    vPrintf("\t|%i\t|%d\t|%d\t|%d\t|%d\t|%d\t|%d\t|",
+                            asTofData[n].s32Tof,
+                            asTofData[n].s8LocalRSSI,
+                            asTofData[n].u8LocalSQI,
+                            asTofData[n].s8RemoteRSSI,
+                            asTofData[n].u8RemoteSQI,
+                            asTofData[n].u32Timestamp,
+                            asTofData[n].u8Status);
                 }
                 else
                 {
                     u8NumErrors++;
+
+                    vPrintf("\t|-\t|-\t|-\t|-\t|-\t|-\t|%d\t|",
+                            asTofData[n].u8Status);
                 }
             }
+
+            /* Calculate statistics */
             if(u8NumErrors != MAX_READINGS)
             {
-                dMean = s32Sum / (255 - MAX_READINGS);
+                dMean = dAcc / (MAX_READINGS - u8NumErrors);
+
+                /* Calculate standard deviation = sqrt((1/N)*(sigma(xi-xmean)2) */
+                dStd = 0.0;
+
+                /* Accumulate sum of squared deviances */
+                for(n = 0; n < MAX_READINGS; n++)
+                {
+                    if(asTofData[n].u8Status == MAC_TOF_STATUS_SUCCESS)
+                    {
+                        dStd += ((double)asTofData[n].s32Tof - dMean) * ((double)asTofData[n].s32Tof - dMean);
+                    }
+                }
+
+                /* std = sqrt(mean of sum of squared deviances) */
+                dStd /= (MAX_READINGS - u8NumErrors);
+                dStd = sqrt(dStd);
+
+
+                s32StanDev = (int32)dStd;
+                s32Mean    = (int32)dMean;
+
+                /* Calculate distances */
+                dTofDistance  = dMean * 0.0003;
+                u32RssiDistance /= (MAX_READINGS - u8NumErrors) * 2;
             }
             else
             {
-                dMean = 0;
+                s32StanDev      = 0;
+                s32Mean         = 0;
+                dTofDistance    = 0;
+                u32RssiDistance = 0;
             }
+
+            vPrintf("\n\nStandDev (ToF): %ips, Mean (ToF): %ips, Errors: %d",
+                    s32StanDev,
+                    s32Mean,
+                    u8NumErrors);
+
+            vPrintf("\nDistance (ToF): %dm, Distance (RSSI): %dcm",
+                    dTofDistance,
+                    u32RssiDistance);
         }
-        /* Clear flag to allow next measurement */
-        bTofInProgress = FALSE;
+        else
+        {
+            vPrintf("\nToF failed with error %d", eTofStatus);
+        }
+
+        *distance = dTofDistance;
+        /* Reset flags for next ToF burst */
         eTofStatus = -1;
-        eTofBeaconRole = E_BEACON_NOT_ASSIGNED;
-    } 
+        bTofInProgress = FALSE;
+    }
+
+    /* Clear flag to allow next measurement */
+    bTofInProgress = FALSE;
+    eTofStatus = -1;
 }
 
 PRIVATE void task_CalculateXYPos(void)
@@ -1340,4 +1448,10 @@ PRIVATE void dtoa(double n, char *res, int afterpoint)
  
         intToStr((int)fpart, res + i + 1, afterpoint);
     }
+}
+
+PRIVATE void vPutChar(unsigned char c) {
+	while ((u8AHI_UartReadLineStatus(UART) & E_AHI_UART_LS_THRE) == 0);
+	vAHI_UartWriteData(UART, c);
+    while ((u8AHI_UartReadLineStatus(UART) & (E_AHI_UART_LS_THRE | E_AHI_UART_LS_TEMT)) != (E_AHI_UART_LS_THRE | E_AHI_UART_LS_TEMT));
 }
