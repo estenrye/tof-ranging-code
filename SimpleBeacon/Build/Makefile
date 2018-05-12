@@ -124,6 +124,8 @@ INCFLAGS += -I$(COMPONENTS_BASE_DIR)/TOF/Include
 # Application libraries
 # Specify additional Component libraries
 
+APPLIBS += TOF
+
 ##############################################################################
 
 # You should not need to edit below this line

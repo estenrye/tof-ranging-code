@@ -122,6 +122,7 @@ INCFLAGS += -I$(COMPONENTS_BASE_DIR)/TOF/Include
 ##############################################################################
 # Application libraries
 # Specify additional Component libraries
+APPLIBS += TOF
 
 LDLIBS = m
 ##############################################################################

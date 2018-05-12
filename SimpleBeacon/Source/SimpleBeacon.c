@@ -176,6 +176,7 @@ PUBLIC void vJenie_CbInit(bool_t bWarmStart)
         vLedControl(LED2, FALSE);
         vLedInitRfd();
         vButtonInitRfd();
+        vAppApiTofInit(TRUE);
 
         sDemoData.sState.eBeaconAssignment = E_BEACON_NOT_ASSIGNED;
 

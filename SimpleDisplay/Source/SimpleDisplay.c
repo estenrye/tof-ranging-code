@@ -3,6 +3,7 @@
 /***        Macro Definitions                                             ***/
 /****************************************************************************/
 #define MAX_BEACONS                 2
+#define MAX_READINGS                10
 
 /* Block (time slice) values */
 #define BLOCK_TIME_IN_32K_PERIODS   1600
@@ -158,6 +159,11 @@ PRIVATE bool_t bKeyDebounce = FALSE;
 /* Routing table storage */
 PRIVATE tsJenieRoutingTable asRoutingTable[100];
 
+PRIVATE eTofReturn eTofStatus = -1;
+PRIVATE volatile bool_t bTofInProgress = FALSE;
+PRIVATE tsAppApiTof_Data asTofDataA[MAX_READINGS];
+PRIVATE tsAppApiTof_Data asTofDataB[MAX_READINGS];
+
 /****************************************************************************/
 /***        Local Function Prototypes                                     ***/
 /****************************************************************************/
@@ -241,7 +247,6 @@ PUBLIC void vJenie_CbInit(bool_t bWarmStart)
 
     if (bWarmStart==FALSE)
     {
-
         sHomeData.bStackReady=FALSE;
         sHomeData.eAppState = E_STATE_STARTUP;
         vUtils_Debug("E_STATE_STARTUP");
@@ -513,7 +518,31 @@ PRIVATE void vInitSystem(void)
     vLedControl(2, TRUE);
     vLedControl(3, TRUE);
     vLedInitFfd();
+    int n;
+    for(n = 0; n < MAX_READINGS; n++)
+    {
+        asTofDataA[n].s32Tof       = 0;
+        asTofDataA[n].s8LocalRSSI  = 0;
+        asTofDataA[n].u8LocalSQI   = 0;
+        asTofDataA[n].s8RemoteRSSI = 0;
+        asTofDataA[n].u8RemoteSQI  = 0;
+        asTofDataA[n].u32Timestamp = 0;
+        asTofDataA[n].u8Status     = 0;
+    }
 
+    for(n = 0; n < MAX_READINGS; n++)
+    {
+        asTofDataB[n].s32Tof       = 0;
+        asTofDataB[n].s8LocalRSSI  = 0;
+        asTofDataB[n].u8LocalSQI   = 0;
+        asTofDataB[n].s8RemoteRSSI = 0;
+        asTofDataB[n].u8RemoteSQI  = 0;
+        asTofDataB[n].u32Timestamp = 0;
+        asTofDataB[n].u8Status     = 0;
+    }
+
+    vAppApiTofInit(TRUE);
+    
     /* Calibrate wake timer */
     sDemoData.sSystem.u32CalibratedTimeout = BLOCK_TIME_IN_32K_PERIODS * 10000 / u32AHI_WakeTimerCalibrate();
 
